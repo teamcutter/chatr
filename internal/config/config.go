@@ -25,13 +25,14 @@ type Registry struct {
 
 func DefaultConfig() *Config {
 	home, _ := os.UserHomeDir()
+	base := filepath.Join(home, ".chatr")
 
 	cfg := &Config{
-		CacheDir: filepath.Join(home, ".chatr", "cache"),
-		ChatrDir: filepath.Join(home, ".chatr"),
-		BinDir: filepath.Join(home, ".chatr", "bin"),
-		ManifestFile: filepath.Join(home, ".chatr", "installed.json"),
-		PackagesDir: filepath.Join(home, ".chatr", "packages"),
+		CacheDir: filepath.Join(base, "cache"),
+		ChatrDir: base,
+		BinDir: filepath.Join(base, "bin"),
+		ManifestFile: filepath.Join(base, "installed.json"),
+		PackagesDir: filepath.Join(base, "packages"),
 		Registries: []Registry{
 			{Name: "default", URL: "https://registery.chatr.dev"},
 		},
@@ -54,7 +55,9 @@ func Load() (*Config, error) {
 		return cfg, nil
 	}
 
-	configPath := filepath.Join(home, ".chatr", "config.toml")
+	base := filepath.Join(home, ".chatr")
+
+	configPath := filepath.Join(base, "config.toml")
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return cfg, nil
@@ -69,8 +72,9 @@ func Load() (*Config, error) {
 
 func Save(cfg *Config) error {
 	home, _ := os.UserHomeDir()
+	base := filepath.Join(home, ".chatr")
 
-	configPath := filepath.Join(home, ".chatr", "config.toml")
+	configPath := filepath.Join(base, "config.toml")
 
 	os.MkdirAll(filepath.Dir(configPath), 0755)
 	f, err := os.Create(configPath)

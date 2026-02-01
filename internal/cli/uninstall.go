@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/teamcutter/chatr/internal/domain"
@@ -12,19 +13,25 @@ func newUninstallCmd() *cobra.Command {
 
     cmd := &cobra.Command{
         Use:  "uninstall <name>",
-        Args: cobra.ExactArgs(1),
+        Args: cobra.MinimumNArgs(1),
         RunE: func(cmd *cobra.Command, args []string) error {
             mgr, _, _ := newManager()
 
-			fmt.Printf("Uninstalling %s...\n", args[0])
-            err := mgr.Uninstall(cmd.Context(), domain.Package{
-                Name:    args[0],
+            for _, arg := range args {
+
+                fmt.Println(strings.Repeat("=", 50))
+                fmt.Printf("Uninstalling %s...\n", arg)
+                err :=  mgr.Uninstall(cmd.Context(), domain.Package{
+                Name:    arg,
                 Version: version,
-            })
-			if err != nil {
-				return err
-			}
-			fmt.Printf("Successfully uninstalled %s@%s\n", args[0], version)
+                })
+
+                if err != nil {
+                        return err
+                }
+                fmt.Printf("Successfully uninstalled %s@%s\n", arg, version)
+            }
+
 			return nil
         },
     }

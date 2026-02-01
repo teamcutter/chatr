@@ -60,6 +60,8 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) error {
 		return  err
 	}
 
+	// TODO: Improve
+	var binPath string
 	entries, err := os.ReadDir(extractDir)
 	if err != nil {
     	return err
@@ -67,13 +69,22 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) error {
 	if len(entries) == 0 {
     	return fmt.Errorf("no files found in %s", extractDir)
 	}
+	if entries[0].Name() == "bin" {
+		binFile, err := os.ReadDir(filepath.Join(extractDir, entries[0].Name()))
+		if err != nil {
+			return err
+		}
+		binPath = filepath.Join(extractDir, entries[0].Name(), binFile[0].Name())
+	} else {
+		binPath = filepath.Join(extractDir, entries[0].Name())
+	}
 
-	pkgPath := filepath.Join(extractDir, entries[0].Name())
-
-	err = m.createSystemLink(pkgPath)
+	err = m.createSystemLink(binPath)
 	if err != nil {
 		return err
 	}
+
+	pkgPath := filepath.Join(extractDir, entries[0].Name())
 
 	return m.state.Add(domain.InstalledPackage{
         Name:        pkg.Name,
@@ -92,14 +103,13 @@ func (m *Manager) Uninstall(ctx context.Context, pkg domain.Package) error {
 			return err
 		}
 	}
-	
+
 	installed, installedPkg, _ := m.state.IsInstalled(pkg.Name)
 	if !installed {
 		return fmt.Errorf("package %s is not installed", pkg.Name)
 	}
 
-	binaryName := filepath.Base(installedPkg.Path)
-	binaryPath := filepath.Join(m.binDir, binaryName)
+	binaryPath := filepath.Join(m.binDir, installedPkg.Name)
 	if err := os.Remove(binaryPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -110,6 +120,21 @@ func (m *Manager) Uninstall(ctx context.Context, pkg domain.Package) error {
 	}
 	
 	return m.state.Remove(pkg.Name)
+}
+
+func (m *Manager) List() ([]string, error) {
+	manifest, err := m.state.Load()
+	if err != nil {
+		return make([]string, 0), err
+	}
+
+	packages := make([]string, 0, len(manifest.Packages))
+	for _, pkg := range manifest.Packages {
+		packageItem := fmt.Sprintf("%s-%s", pkg.Name, pkg.Version)
+		packages = append(packages, packageItem)
+	}
+
+	return packages, nil
 }
 
 func (m *Manager) createSystemLink(path string) error {

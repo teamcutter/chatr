@@ -17,7 +17,7 @@ func Execute() error {
 	rootCmd.AddCommand(
 		newInstallCmd(),
 		newUninstallCmd(),
-		// newListCmd(),
+		newListCmd(),
 	)
 	return rootCmd.Execute()
 }
