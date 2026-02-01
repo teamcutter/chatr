@@ -21,7 +21,7 @@ func New(dir string) (*DiskCache, error) {
 
 func (c *DiskCache) GetPath(name, version string) string {
 	dir := filepath.Join(c.dir, name, version)
-	for _, ext := range domain.Extensions {
+	for _, ext := range domain.Extensions() {
 		path := filepath.Join(dir, "package"+ext)
 		if _, err := os.Stat(path); err == nil {
 			return path
@@ -71,7 +71,7 @@ func (c *DiskCache) Size() (int64, error) {
 
 func getArchiveExt(path string) string {
 	lower := filepath.Base(path)
-	for _, ext := range domain.Extensions {
+	for _, ext := range domain.Extensions() {
 		if len(lower) > len(ext) && lower[len(lower)-len(ext):] == ext {
 			return ext
 		}

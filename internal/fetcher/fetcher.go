@@ -109,7 +109,7 @@ func computeChecksum(path string) (string, error) {
 
 func extFromURL(rawURL string) string {
 	u := path.Base(rawURL)
-	for _, ext := range domain.Extensions {
+	for _, ext := range domain.Extensions() {
 		if strings.HasSuffix(u, ext) {
 			return ext
 		}
