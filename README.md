@@ -11,7 +11,8 @@ A package manager CLI for downloading, installing, and managing binary packages.
 ### Build
 
 ```bash
-go build -o bin/chatr ./cmd/chatr
+mkdir -p ~/.chatr/bin && go build -o ~/.chatr/bin/chatr ./cmd/chatr
+
 ```
 
 ### Install

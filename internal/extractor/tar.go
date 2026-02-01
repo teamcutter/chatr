@@ -2,6 +2,7 @@ package extractor
 
 import (
 	"archive/tar"
+	"compress/bzip2"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -15,7 +16,7 @@ import (
 
 type TARExtractor struct{}
 
-func New() *TARExtractor {
+func NewTAR() *TARExtractor {
 	return &TARExtractor{}
 }
 
@@ -60,7 +61,7 @@ func (te *TARExtractor) Extract(src, dst string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return err
 			}
-			outFile, err := os.Create(target)
+			outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, header.FileInfo().Mode())
 			if err != nil {
 				return err
 			}
@@ -98,6 +99,9 @@ func (te *TARExtractor) getDecompressor(src string, file *os.File) (io.Reader, f
 			return nil, nil, fmt.Errorf("xz: %w", err)
 		}
 		return xzr, nil, nil
+
+	case strings.HasSuffix(lower, ".tar.bz2"), strings.HasSuffix(lower, ".tbz2"):
+		return bzip2.NewReader(file), nil, nil
 
 	case strings.HasSuffix(lower, ".tar"):
 		return file, nil, nil

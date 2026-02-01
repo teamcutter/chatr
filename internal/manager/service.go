@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/teamcutter/chatr/internal/domain"
@@ -59,31 +61,17 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) error {
 		return err
 	}
 
-	// TODO: Improve
-	var binPath string
-	entries, err := os.ReadDir(extractDir)
-	if err != nil {
-		return err
-	}
-	if len(entries) == 0 {
-		return fmt.Errorf("no files found in %s", extractDir)
-	}
-	if entries[0].Name() == "bin" {
-		binFile, err := os.ReadDir(filepath.Join(extractDir, entries[0].Name()))
-		if err != nil {
-			return err
-		}
-		binPath = filepath.Join(extractDir, entries[0].Name(), binFile[0].Name())
-	} else {
-		binPath = filepath.Join(extractDir, entries[0].Name())
-	}
-
-	err = m.createSystemLink(binPath)
+	binPath, err := findBinary(extractDir)
 	if err != nil {
 		return err
 	}
 
-	pkgPath := filepath.Join(extractDir, entries[0].Name())
+	err = m.createSystemLink(binPath, pkg.Name)
+	if err != nil {
+		return err
+	}
+
+	pkgPath := filepath.Dir(binPath)
 
 	return m.state.Add(domain.InstalledPackage{
 		Name:        pkg.Name,
@@ -136,17 +124,82 @@ func (m *Manager) List() ([]string, error) {
 	return packages, nil
 }
 
-func (m *Manager) createSystemLink(path string) error {
+func (m *Manager) createSystemLink(path, pkgName string) error {
 	if err := os.MkdirAll(m.binDir, 0755); err != nil {
 		return fmt.Errorf("failed to create bin directory: %w", err)
 	}
 
-	binaryName := filepath.Base(path)
-	linkPath := filepath.Join(m.binDir, binaryName)
+	linkPath := filepath.Join(m.binDir, pkgName)
 
 	if _, err := os.Lstat(linkPath); err == nil {
 		os.Remove(linkPath)
 	}
 
 	return os.Symlink(path, linkPath)
+}
+
+func findBinary(dir string) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", err
+	}
+
+	var visible []os.DirEntry
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), ".") {
+			visible = append(visible, e)
+		}
+	}
+
+	if len(visible) == 0 {
+		return "", fmt.Errorf("no files found in %s", dir)
+	}
+
+	for _, e := range visible {
+		if e.Name() == "bin" && e.IsDir() {
+			binEntries, err := os.ReadDir(filepath.Join(dir, "bin"))
+			if err != nil {
+				return "", err
+			}
+			for _, be := range binEntries {
+				if !strings.HasPrefix(be.Name(), ".") {
+					return filepath.Join(dir, "bin", be.Name()), nil
+				}
+			}
+		}
+	}
+
+	if runtime.GOOS == "darwin" {
+		for _, e := range visible {
+			if strings.HasSuffix(e.Name(), ".app") && e.IsDir() {
+				appName := strings.TrimSuffix(e.Name(), ".app")
+				cliName := strings.ToLower(appName)
+
+				resourcesDir := filepath.Join(dir, e.Name(), "Contents", "Resources")
+				if resEntries, err := os.ReadDir(resourcesDir); err == nil {
+					for _, re := range resEntries {
+						if re.Name() == cliName && !re.IsDir() {
+							binPath := filepath.Join(resourcesDir, re.Name())
+							if info, err := os.Stat(binPath); err == nil && info.Mode()&0111 != 0 {
+								return binPath, nil
+							}
+						}
+					}
+				}
+
+				macosDir := filepath.Join(dir, e.Name(), "Contents", "MacOS")
+				binEntries, err := os.ReadDir(macosDir)
+				if err != nil {
+					return "", err
+				}
+				for _, be := range binEntries {
+					if !strings.HasPrefix(be.Name(), ".") {
+						return filepath.Join(macosDir, be.Name()), nil
+					}
+				}
+			}
+		}
+	}
+
+	return filepath.Join(dir, visible[0].Name()), nil
 }
