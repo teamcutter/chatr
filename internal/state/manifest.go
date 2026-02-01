@@ -9,7 +9,7 @@ import (
 )
 
 type ManifestState struct {
-    path string
+	path string
 }
 
 func New(path string) *ManifestState {
@@ -21,17 +21,17 @@ func New(path string) *ManifestState {
 func (m *ManifestState) Load() (*domain.Manifest, error) {
 	data, err := os.ReadFile(m.path)
 	if os.IsNotExist(err) {
-        return domain.NewManifest(), nil
-    }
-    if err != nil {
-        return nil, err
-    }
+		return domain.NewManifest(), nil
+	}
+	if err != nil {
+		return nil, err
+	}
 
 	var manifest domain.Manifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return nil, err
 	}
-	
+
 	if manifest.Packages == nil {
 		manifest.Packages = make(map[string]domain.InstalledPackage)
 	}
@@ -44,19 +44,19 @@ func (m *ManifestState) Save(manifest *domain.Manifest) error {
 		return err
 	}
 
-    data, err := json.MarshalIndent(manifest, "", "  ")
-    if err != nil {
-        return err
-    }
-	
-    return os.WriteFile(m.path, data, 0644)
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(m.path, data, 0644)
 }
 
 func (m *ManifestState) IsInstalled(name string) (bool, *domain.InstalledPackage, error) {
 	data, err := os.ReadFile(m.path)
 	if os.IsNotExist(err) {
-        return false, nil, err
-    }
+		return false, nil, err
+	}
 
 	var manifest domain.Manifest
 	err = json.Unmarshal(data, &manifest)
@@ -90,6 +90,6 @@ func (m *ManifestState) Remove(name string) error {
 	}
 
 	delete(manifest.Packages, name)
-	
+
 	return m.Save(manifest)
 }

@@ -9,18 +9,18 @@ import (
 )
 
 type Config struct {
-	CacheDir string `toml:"cache_dir"`
-	ChatrDir string `toml:"chatr_dir"`
-	PackagesDir string `toml:"packages_dir"`
-	BinDir string `toml:"bin_dir"`
-	ManifestFile string `toml:"manifest_file"`
-	Registries []Registry `toml:"registries"`
-	DefaultRegistry string `toml:"default_registry"`
+	CacheDir        string     `toml:"cache_dir"`
+	ChatrDir        string     `toml:"chatr_dir"`
+	PackagesDir     string     `toml:"packages_dir"`
+	BinDir          string     `toml:"bin_dir"`
+	ManifestFile    string     `toml:"manifest_file"`
+	Registries      []Registry `toml:"registries"`
+	DefaultRegistry string     `toml:"default_registry"`
 }
 
 type Registry struct {
 	Name string `toml:"name"`
-	URL string `toml:"url"`
+	URL  string `toml:"url"`
 }
 
 func DefaultConfig() *Config {
@@ -28,18 +28,18 @@ func DefaultConfig() *Config {
 	base := filepath.Join(home, ".chatr")
 
 	cfg := &Config{
-		CacheDir: filepath.Join(base, "cache"),
-		ChatrDir: base,
-		BinDir: filepath.Join(base, "bin"),
+		CacheDir:     filepath.Join(base, "cache"),
+		ChatrDir:     base,
+		BinDir:       filepath.Join(base, "bin"),
 		ManifestFile: filepath.Join(base, "installed.json"),
-		PackagesDir: filepath.Join(base, "packages"),
+		PackagesDir:  filepath.Join(base, "packages"),
 		Registries: []Registry{
 			{Name: "default", URL: "https://registery.chatr.dev"},
 		},
 		DefaultRegistry: "default",
 	}
 
-	err := Save(cfg) 
+	err := Save(cfg)
 	if err != nil {
 		fmt.Println(err) // TODO: Improve
 	}
@@ -84,4 +84,4 @@ func Save(cfg *Config) error {
 	defer f.Close()
 
 	return toml.NewEncoder(f).Encode(cfg)
-} 
+}

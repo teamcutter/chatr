@@ -21,14 +21,14 @@ func New(dir string) (*DiskCache, error) {
 
 func (c *DiskCache) GetPath(name, version string) string {
 	dir := filepath.Join(c.dir, name, version)
-    for _, ext := range domain.Extensions {
-        path := filepath.Join(dir, "package" + ext)
-        if _, err := os.Stat(path); err == nil {
-            return path
-        }
-    }
+	for _, ext := range domain.Extensions {
+		path := filepath.Join(dir, "package"+ext)
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
 
-    return filepath.Join(dir, "package.tar.gz")
+	return filepath.Join(dir, "package.tar.gz")
 }
 
 func (c *DiskCache) Has(name, version string) bool {
@@ -39,7 +39,7 @@ func (c *DiskCache) Has(name, version string) bool {
 func (c *DiskCache) Store(name, version, src string) (string, error) {
 	ext := getArchiveExt(src)
 	destDir := filepath.Join(c.dir, name, version)
-	destPath := filepath.Join(destDir, "package" + ext)
+	destPath := filepath.Join(destDir, "package"+ext)
 
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return "", err
@@ -57,13 +57,13 @@ func (c *DiskCache) Size() (int64, error) {
 
 	err := filepath.Walk(c.dir, func(_ string, info os.FileInfo, err error) error {
 		if err != nil {
-			return  err
+			return err
 		}
 
 		if !info.IsDir() {
 			size += info.Size()
 		}
-		return  nil
+		return nil
 	})
 
 	return size, err

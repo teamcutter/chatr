@@ -34,7 +34,7 @@ func newManager() (*manager.Manager, *config.Config, error) {
 	}
 
 	return manager.New(
-		fetcher.New(cfg.CacheDir, 1 * time.Hour),
+		fetcher.New(cfg.CacheDir, 1*time.Hour),
 		c,
 		extractor.New(),
 		state.New(cfg.ManifestFile),

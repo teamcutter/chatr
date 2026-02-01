@@ -11,32 +11,31 @@ import (
 )
 
 type Manager struct {
-	fetcher   domain.Fetcher
-	cache     domain.Cache
-	extractor domain.Extractor
-	state domain.State
+	fetcher     domain.Fetcher
+	cache       domain.Cache
+	extractor   domain.Extractor
+	state       domain.State
 	packagesDir string
-	binDir string
+	binDir      string
 }
 
 func New(
-	fetcher domain.Fetcher, 
-	cache domain.Cache, 
-	extractor domain.Extractor, 
+	fetcher domain.Fetcher,
+	cache domain.Cache,
+	extractor domain.Extractor,
 	state domain.State,
 	packagesDir, binDir string,
-	) *Manager {
-		
-		return &Manager{
-			fetcher: fetcher,
-			cache: cache,
-			extractor: extractor,
-			state: state,
-			packagesDir: packagesDir,
-			binDir: binDir,
-		}
-	} 
+) *Manager {
 
+	return &Manager{
+		fetcher:     fetcher,
+		cache:       cache,
+		extractor:   extractor,
+		state:       state,
+		packagesDir: packagesDir,
+		binDir:      binDir,
+	}
+}
 
 func (m *Manager) Install(ctx context.Context, pkg domain.Package) error {
 	if installed, _, _ := m.state.IsInstalled(pkg.Name); installed {
@@ -57,17 +56,17 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) error {
 
 	extractDir := filepath.Join(m.packagesDir, pkg.Name, pkg.Version)
 	if err := m.extractor.Extract(archivePath, extractDir); err != nil {
-		return  err
+		return err
 	}
 
 	// TODO: Improve
 	var binPath string
 	entries, err := os.ReadDir(extractDir)
 	if err != nil {
-    	return err
+		return err
 	}
 	if len(entries) == 0 {
-    	return fmt.Errorf("no files found in %s", extractDir)
+		return fmt.Errorf("no files found in %s", extractDir)
 	}
 	if entries[0].Name() == "bin" {
 		binFile, err := os.ReadDir(filepath.Join(extractDir, entries[0].Name()))
@@ -87,12 +86,12 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) error {
 	pkgPath := filepath.Join(extractDir, entries[0].Name())
 
 	return m.state.Add(domain.InstalledPackage{
-        Name:        pkg.Name,
-        Version:     pkg.Version,
-        URL:         pkg.DownloadURL,
-        Path:        pkgPath,
-        InstalledAt: time.Now(),
-    })
+		Name:        pkg.Name,
+		Version:     pkg.Version,
+		URL:         pkg.DownloadURL,
+		Path:        pkgPath,
+		InstalledAt: time.Now(),
+	})
 }
 
 func (m *Manager) Uninstall(ctx context.Context, pkg domain.Package) error {
@@ -118,7 +117,7 @@ func (m *Manager) Uninstall(ctx context.Context, pkg domain.Package) error {
 	if err := os.RemoveAll(packageDir); err != nil {
 		return err
 	}
-	
+
 	return m.state.Remove(pkg.Name)
 }
 

@@ -77,7 +77,7 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, pkg domain.Package) domain.Fetc
 	if pkg.SHA256 != "" {
 		actual, err := computeChecksum(dst)
 		if err != nil {
-			return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Error: err} 
+			return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Error: err}
 		}
 
 		if actual != pkg.SHA256 {

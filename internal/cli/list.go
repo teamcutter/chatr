@@ -7,12 +7,12 @@ import (
 )
 
 func newListCmd() *cobra.Command {
-    cmd := &cobra.Command{
-        Use:  "list",
-        RunE: func(cmd *cobra.Command, args []string) error {
-            mgr, _, _ := newManager()
+	cmd := &cobra.Command{
+		Use: "list",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			mgr, _, _ := newManager()
 
-            packages, err := mgr.List()
+			packages, err := mgr.List()
 			if err != nil {
 				return err
 			}
@@ -21,9 +21,9 @@ func newListCmd() *cobra.Command {
 				fmt.Printf("%s\n", v)
 			}
 
-            return nil
-        },
-    }
+			return nil
+		},
+	}
 
-    return cmd
+	return cmd
 }
