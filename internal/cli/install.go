@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/teamcutter/chatr/internal/domain"
 )
@@ -16,7 +18,19 @@ func newInstallCmd() *cobra.Command {
 		Use:  "install <name@url>...",
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mgr, cfg, _ := newManager()
+			mgr, cfg, err := newManager()
+			if err != nil {
+				return err
+			}
+
+			wg := &sync.WaitGroup{}
+			mu := &sync.Mutex{}
+			errCh := make(chan error, len(args))
+
+			green := color.New(color.FgGreen).SprintFunc()
+			cyan := color.New(color.FgCyan).SprintFunc()
+			red := color.New(color.FgRed).SprintFunc()
+			bold := color.New(color.Bold).SprintFunc()
 
 			for _, arg := range args {
 				parts := strings.SplitN(arg, "@", 2)
@@ -24,21 +38,44 @@ func newInstallCmd() *cobra.Command {
 					return fmt.Errorf("invalid format %q: expected name@url", arg)
 				}
 
-				fmt.Println(strings.Repeat("=", 50))
-				fmt.Printf("Installing %s...\n", parts[0])
-				err := mgr.Install(cmd.Context(), domain.Package{
-					Name:        parts[0],
-					DownloadURL: parts[1],
-					Version:     version,
-					SHA256:      sha256,
-				})
-				if err != nil {
-					return err
-				}
+				wg.Add(1)
+				go func(name, url string) {
+					defer wg.Done()
 
-				fmt.Printf("Installed %s\n", parts[0])
-				fmt.Printf("Cache: %s\n", filepath.Join(cfg.CacheDir, parts[0]))
-				fmt.Printf("Packages: %s\n", filepath.Join(cfg.PackagesDir, parts[0]))
+					err := mgr.Install(cmd.Context(), domain.Package{
+						Name:        name,
+						DownloadURL: url,
+						Version:     version,
+						SHA256:      sha256,
+					})
+					if err != nil {
+						errCh <- fmt.Errorf("%s: %v", name, err)
+						return
+					}
+
+					mu.Lock()
+					fmt.Printf("\n%s %s\n", green("✓"), bold(name))
+					fmt.Printf("  %s %s\n", cyan("cache:"), filepath.Join(cfg.CacheDir, name))
+					fmt.Printf("  %s %s\n", cyan("path:"), filepath.Join(cfg.PackagesDir, name))
+					mu.Unlock()
+
+				}(parts[0], parts[1])
+			}
+
+			wg.Wait()
+			close(errCh)
+
+			var errs []error
+			for err := range errCh {
+				errs = append(errs, err)
+			}
+
+			if len(errs) > 0 {
+				fmt.Println()
+				for _, e := range errs {
+					fmt.Printf("%s %s\n", red("✗"), e)
+				}
+				return fmt.Errorf("failed to install %d package(s)", len(errs))
 			}
 
 			return nil
