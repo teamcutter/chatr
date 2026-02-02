@@ -25,7 +25,7 @@ func newUninstallCmd() *cobra.Command {
 
 			var failed int
 			for _, arg := range args {
-				err := mgr.Uninstall(cmd.Context(), domain.Package{
+				rmName, rmVersion, err := mgr.Uninstall(cmd.Context(), domain.Package{
 					Name:    arg,
 					Version: version,
 				})
@@ -35,7 +35,7 @@ func newUninstallCmd() *cobra.Command {
 					failed++
 					continue
 				}
-				fmt.Printf("\n%s %s%s%s\n", green("✓"), bold(arg), bold("@"), bold(version))
+				fmt.Printf("\n%s %s%s%s\n", green("✓"), bold(rmName), bold("@"), bold(rmVersion))
 			}
 
 			if failed > 0 {

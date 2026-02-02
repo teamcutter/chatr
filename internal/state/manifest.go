@@ -33,7 +33,7 @@ func (m *ManifestState) Load() (*domain.Manifest, error) {
 	}
 
 	if manifest.Packages == nil {
-		manifest.Packages = make(map[string]domain.InstalledPackage)
+		manifest.Packages = make(map[string]*domain.InstalledPackage)
 	}
 
 	return &manifest, nil
@@ -69,10 +69,10 @@ func (m *ManifestState) IsInstalled(name string) (bool, *domain.InstalledPackage
 		return false, nil, nil
 	}
 
-	return true, &pkg, nil
+	return true, pkg, nil
 }
 
-func (m *ManifestState) Add(pkg domain.InstalledPackage) error {
+func (m *ManifestState) Add(pkg *domain.InstalledPackage) error {
 	manifest, err := m.Load()
 	if err != nil {
 		return err

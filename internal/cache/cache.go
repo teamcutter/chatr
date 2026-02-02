@@ -3,6 +3,7 @@ package cache
 import (
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/teamcutter/chatr/internal/domain"
 )
@@ -20,7 +21,22 @@ func New(dir string) (*DiskCache, error) {
 }
 
 func (c *DiskCache) GetPath(name, version string) string {
-	dir := filepath.Join(c.dir, name, version)
+	actual := version
+	if version == "latest" {
+		entries, _ := os.ReadDir(filepath.Join(c.dir, name))
+		var versions []string
+		for _, e := range entries {
+			if e.IsDir() {
+				versions = append(versions, e.Name())
+			}
+		}
+		if len(versions) > 0 {
+			sort.Strings(versions)
+			actual = versions[len(versions)-1]
+		}
+	}
+
+	dir := filepath.Join(c.dir, name, actual)
 	for _, ext := range domain.Extensions() {
 		path := filepath.Join(dir, "package"+ext)
 		if _, err := os.Stat(path); err == nil {

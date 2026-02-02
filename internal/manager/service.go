@@ -39,9 +39,9 @@ func New(
 	}
 }
 
-func (m *Manager) Install(ctx context.Context, pkg domain.Package) error {
+func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.InstalledPackage, error) {
 	if installed, _, _ := m.state.IsInstalled(pkg.Name); installed {
-		return fmt.Errorf("package %s already installed", pkg.Name)
+		return nil, fmt.Errorf("package %s already installed", pkg.Name)
 	}
 
 	var archivePath string
@@ -50,62 +50,74 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) error {
 	} else {
 		result := m.fetcher.Fetch(ctx, pkg)
 		if result.Error != nil {
-			return result.Error
+			return nil, result.Error
 		}
 
 		archivePath, _ = m.cache.Store(pkg.Name, pkg.Version, result.Path)
 	}
 
 	if err := m.extractor.Extract(archivePath, m.packagesDir); err != nil {
-		return err
+		return nil, err
 	}
 
 	binPath, err := findBinary(m.packagesDir)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	err = m.createSystemLink(binPath, pkg.Name)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	pkgPath := filepath.Dir(binPath)
+	pkgPath := filepath.Join(m.packagesDir, pkg.Name, pkg.Version)
 
-	return m.state.Add(domain.InstalledPackage{
+	installedPkg := &domain.InstalledPackage{
 		Name:        pkg.Name,
 		Version:     pkg.Version,
 		URL:         pkg.DownloadURL,
 		Path:        pkgPath,
 		InstalledAt: time.Now(),
-	})
+	}
+
+	err = m.state.Add(installedPkg)
+	if err != nil {
+		return nil, err
+	}
+
+	return installedPkg, nil
 }
 
-func (m *Manager) Uninstall(ctx context.Context, pkg domain.Package) error {
+func (m *Manager) Uninstall(ctx context.Context, pkg domain.Package) (string, string, error) {
 	if m.cache.Has(pkg.Name, pkg.Version) {
 		cachePath := m.cache.GetPath(pkg.Name, pkg.Version)
 		cacheDir := filepath.Dir(filepath.Dir(cachePath))
 		if err := os.RemoveAll(cacheDir); err != nil && !os.IsNotExist(err) {
-			return err
+			return "", "", err
 		}
 	}
 
 	installed, installedPkg, _ := m.state.IsInstalled(pkg.Name)
 	if !installed {
-		return fmt.Errorf("package %s is not installed", pkg.Name)
+		return "", "", fmt.Errorf("package %s is not installed", pkg.Name)
 	}
 
 	binaryPath := filepath.Join(m.binDir, installedPkg.Name)
 	if err := os.Remove(binaryPath); err != nil && !os.IsNotExist(err) {
-		return err
+		return "", "", err
 	}
 
 	packageDir := filepath.Join(m.packagesDir, pkg.Name)
 	if err := os.RemoveAll(packageDir); err != nil {
-		return err
+		return "", "", err
 	}
 
-	return m.state.Remove(pkg.Name)
+	err := m.state.Remove(pkg.Name)
+	if err != nil {
+		return "", "", err
+	}
+
+	return installedPkg.Name, installedPkg.Version, nil
 }
 
 func (m *Manager) List() ([]string, error) {

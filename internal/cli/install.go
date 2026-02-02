@@ -43,10 +43,17 @@ func newInstallCmd() *cobra.Command {
 						return
 					}
 
-					err = mgr.Install(cmd.Context(), domain.Package{
+					var installVersion string
+					if version == "latest" {
+						installVersion = formula.Version
+					} else {
+						installVersion = version
+					}
+
+					pkg, err := mgr.Install(cmd.Context(), domain.Package{
 						Name:        formula.Name,
 						DownloadURL: formula.URL,
-						Version:     formula.Version,
+						Version:     installVersion,
 						SHA256:      formula.SHA256,
 					})
 					if err != nil {
@@ -55,9 +62,9 @@ func newInstallCmd() *cobra.Command {
 					}
 
 					mu.Lock()
-					fmt.Printf("\n%s %s\n", green("✓"), bold(name))
-					fmt.Printf("  %s %s\n", cyan("cache:"), filepath.Join(cfg.CacheDir, name))
-					fmt.Printf("  %s %s\n", cyan("path:"), filepath.Join(cfg.PackagesDir, name))
+					fmt.Printf("\n%s %s%s%s\n", green("✓"), bold(pkg.Name), bold("@"), bold(pkg.Version))
+					fmt.Printf("  %s %s\n", cyan("cache:"), filepath.Join(cfg.CacheDir, pkg.Name, pkg.Version))
+					fmt.Printf("  %s %s\n", cyan("path:"), filepath.Join(cfg.PackagesDir, pkg.Name, pkg.Version))
 					mu.Unlock()
 
 				}(name)
