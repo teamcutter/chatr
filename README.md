@@ -27,19 +27,66 @@ Add this line to your shell configuration file (`~/.bashrc`, `~/.zshrc`, etc.) t
 
 ## Usage
 
+### Install a package
+
 ```bash
-# Install a package
-chatr install jq@https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux64.tar.gz
+~/ chatr install hello
+Downloading hello 100% |█████████████████████████████████████████████| (53/53 kB, 540 kB/s)
 
-# Install with version and checksum verification
-chatr install jq@https://... --version 1.7.1 --sha256 <checksum>
+✓ hello@2.12.2
+  cache: /Users/ruslan/.chatr/cache/hello/2.12.2
+  path: /Users/ruslan/.chatr/packages/hello/2.12.2
 
-# List installed packages
-chatr list
-
-# Uninstall a package
-chatr uninstall jq
+~/ hello
+Hello, world!
 ```
+
+## Commands
+
+### install
+
+Install one or more packages.
+
+```bash
+chatr install <name>...
+```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--version` | `-v` | `latest` | Package version |
+| `--sha256` | | | Expected SHA256 checksum |
+
+### uninstall
+
+Uninstall one or more packages.
+
+```bash
+chatr uninstall <name>...
+```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--version` | `-v` | `latest` | Package version to uninstall |
+
+### list
+
+List all installed packages.
+
+```bash
+chatr list
+```
+
+### search
+
+Search for packages in the registry.
+
+```bash
+chatr search <query>
+```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--show` | `-s` | `50` | Number of results to display |
 
 ## License
 
