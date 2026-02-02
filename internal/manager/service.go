@@ -56,12 +56,11 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) error {
 		archivePath, _ = m.cache.Store(pkg.Name, pkg.Version, result.Path)
 	}
 
-	extractDir := filepath.Join(m.packagesDir, pkg.Name, pkg.Version)
-	if err := m.extractor.Extract(archivePath, extractDir); err != nil {
+	if err := m.extractor.Extract(archivePath, m.packagesDir); err != nil {
 		return err
 	}
 
-	binPath, err := findBinary(extractDir)
+	binPath, err := findBinary(m.packagesDir)
 	if err != nil {
 		return err
 	}
