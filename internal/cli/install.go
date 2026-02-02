@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/fatih/color"
@@ -15,10 +14,10 @@ func newInstallCmd() *cobra.Command {
 	var version, sha256 string
 
 	cmd := &cobra.Command{
-		Use:  "install <name@url>...",
+		Use:  "install <name>...",
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mgr, cfg, err := newManager()
+			mgr, cfg, reg, err := newManager()
 			if err != nil {
 				return err
 			}
@@ -32,21 +31,23 @@ func newInstallCmd() *cobra.Command {
 			red := color.New(color.FgRed).SprintFunc()
 			bold := color.New(color.Bold).SprintFunc()
 
-			for _, arg := range args {
-				parts := strings.SplitN(arg, "@", 2)
-				if len(parts) != 2 {
-					return fmt.Errorf("invalid format %q: expected name@url", arg)
-				}
+			for _, name := range args {
 
 				wg.Add(1)
-				go func(name, url string) {
+				go func(name string) {
 					defer wg.Done()
 
-					err := mgr.Install(cmd.Context(), domain.Package{
-						Name:        name,
-						DownloadURL: url,
-						Version:     version,
-						SHA256:      sha256,
+					formula, err := reg.Get(cmd.Context(), name)
+					if err != nil {
+						errCh <- fmt.Errorf("%s: %v", name, err)
+						return
+					}
+
+					err = mgr.Install(cmd.Context(), domain.Package{
+						Name:        formula.Name,
+						DownloadURL: formula.URL,
+						Version:     formula.Version,
+						SHA256:      formula.SHA256,
 					})
 					if err != nil {
 						errCh <- fmt.Errorf("%s: %v", name, err)
@@ -59,7 +60,7 @@ func newInstallCmd() *cobra.Command {
 					fmt.Printf("  %s %s\n", cyan("path:"), filepath.Join(cfg.PackagesDir, name))
 					mu.Unlock()
 
-				}(parts[0], parts[1])
+				}(name)
 			}
 
 			wg.Wait()

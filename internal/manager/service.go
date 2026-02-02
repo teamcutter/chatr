@@ -117,7 +117,7 @@ func (m *Manager) List() ([]string, error) {
 
 	packages := make([]string, 0, len(manifest.Packages))
 	for _, pkg := range manifest.Packages {
-		packageItem := fmt.Sprintf("%s-%s", pkg.Name, pkg.Version)
+		packageItem := fmt.Sprintf("%s@%s", pkg.Name, pkg.Version)
 		packages = append(packages, packageItem)
 	}
 

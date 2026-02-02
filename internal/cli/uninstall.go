@@ -15,7 +15,7 @@ func newUninstallCmd() *cobra.Command {
 		Use:  "uninstall <name>",
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mgr, _, _ := newManager()
+			mgr, _, _, _ := newManager()
 
 			green := color.New(color.FgGreen).SprintFunc()
 			red := color.New(color.FgRed).SprintFunc()
@@ -35,7 +35,7 @@ func newUninstallCmd() *cobra.Command {
 					failed++
 					continue
 				}
-				fmt.Printf("\n%s %s@%s\n", green("✓"), bold(arg), bold(version))
+				fmt.Printf("\n%s %s%s%s\n", green("✓"), bold(arg), bold("@"), bold(version))
 			}
 
 			if failed > 0 {

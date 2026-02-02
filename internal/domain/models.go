@@ -37,7 +37,7 @@ type Formula struct {
 	Description  string
 	Homepage     string
 	Version      string
-	URLs         map[string]string
-	SHA256       map[string]string
+	URL          string
+	SHA256       string
 	Dependencies []string
 }

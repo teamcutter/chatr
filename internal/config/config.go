@@ -34,9 +34,9 @@ func DefaultConfig() *Config {
 		ManifestFile: filepath.Join(base, "installed.json"),
 		PackagesDir:  filepath.Join(base, "packages"),
 		Registries: []Registry{
-			{Name: "default", URL: "https://registery.chatr.dev"},
+			{Name: "homebrew", URL: "https://formulae.brew.sh/api/"},
 		},
-		DefaultRegistry: "default",
+		DefaultRegistry: "homebrew",
 	}
 
 	err := Save(cfg)

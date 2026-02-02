@@ -1,0 +1,240 @@
+package registry
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/teamcutter/chatr/internal/domain"
+)
+
+const baseUrl string = "https://formulae.brew.sh/api/"
+
+type HomebrewRegistry struct {
+	client   *http.Client
+	cacheDir string
+}
+
+type Formulae struct {
+	Name     string `json:"name"`
+	FullName string `json:"full_name"`
+	Desc     string `json:"desc"`
+	Homepage string `json:"homepage"`
+	Versions struct {
+		Stable string `json:"stable"`
+		Head   string `json:"head"`
+	} `json:"versions"`
+	URLs struct {
+		Stable struct {
+			URL      string `json:"url"`
+			Checksum string `json:"checksum"`
+		} `json:"stable"`
+	} `json:"urls"`
+	Bottle struct {
+		Stable struct {
+			Files map[string]struct {
+				URL    string `json:"url"`
+				SHA256 string `json:"sha256"`
+			} `json:"files"`
+		} `json:"stable"`
+	} `json:"bottle"`
+	Dependencies []string `json:"dependencies"`
+}
+
+func New(cacheDir string) *HomebrewRegistry {
+	return &HomebrewRegistry{
+		client:   &http.Client{},
+		cacheDir: cacheDir,
+	}
+}
+
+func (h *HomebrewRegistry) Get(ctx context.Context, name string) (*domain.Formula, error) {
+	url := baseUrl + "formula/" + name + ".json"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("User-Agent", "chatr")
+
+	resp, err := h.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetching formula: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("formula %q not found", name)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	var f Formulae
+	if err := json.NewDecoder(resp.Body).Decode(&f); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+
+	return h.toFormula(&f), nil
+}
+
+func (h *HomebrewRegistry) Search(ctx context.Context, query string) ([]domain.Formula, error) {
+	var formulae []Formulae
+
+	if cached, ok := h.getFromCache(time.Minute * 10); ok {
+		if err := json.Unmarshal(cached, &formulae); err == nil {
+			return h.filterAndSort(formulae, query), nil
+		}
+	}
+
+	url := baseUrl + "formula.json"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("User-Agent", "chatr")
+
+	resp, err := h.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetching formulae: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading response: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &formulae); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+
+	_ = h.storeToCache(data)
+
+	return h.filterAndSort(formulae, query), nil
+}
+
+func (h *HomebrewRegistry) filterAndSort(formulae []Formulae, query string) []domain.Formula {
+	query = strings.ToLower(query)
+	var results []domain.Formula
+	for _, f := range formulae {
+		if strings.Contains(strings.ToLower(f.Name), query) ||
+			strings.Contains(strings.ToLower(f.Desc), query) {
+			results = append(results, *h.toFormula(&f))
+		}
+	}
+
+	slices.SortFunc(results, func(a, b domain.Formula) int {
+		nameA := strings.ToLower(a.Name)
+		nameB := strings.ToLower(b.Name)
+
+		if (nameA == query) != (nameB == query) {
+			if nameA == query {
+				return -1
+			}
+			return 1
+		}
+
+		if strings.HasPrefix(nameA, query) != strings.HasPrefix(nameB, query) {
+			if strings.HasPrefix(nameA, query) {
+				return -1
+			}
+		}
+
+		return strings.Compare(nameA, nameB)
+	})
+
+	return results
+}
+
+func (h *HomebrewRegistry) GetVersions(ctx context.Context, name string) ([]string, error) {
+	formula, err := h.Get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	return []string{formula.Version}, nil
+}
+
+func (h *HomebrewRegistry) getFromCache(ttl time.Duration) ([]byte, bool) {
+	path := filepath.Join(h.cacheDir, "formulae.json")
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, false
+	}
+
+	if time.Since(info.ModTime()) > ttl {
+		return nil, false
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+
+	return data, true
+}
+
+func (h *HomebrewRegistry) storeToCache(data []byte) error {
+	path := filepath.Join(h.cacheDir, "formulae.json")
+	return os.WriteFile(path, data, 0644)
+}
+
+func (h *HomebrewRegistry) toFormula(f *Formulae) *domain.Formula {
+	var url, sha256 string
+
+	for _, p := range getPlatformCandidates() {
+		if file, ok := f.Bottle.Stable.Files[p]; ok {
+			url = file.URL
+			sha256 = file.SHA256
+			break
+		}
+	}
+
+	if url == "" && f.URLs.Stable.URL != "" {
+		url = f.URLs.Stable.URL
+		sha256 = f.URLs.Stable.Checksum
+	}
+
+	return &domain.Formula{
+		Name:         f.Name,
+		Description:  f.Desc,
+		Homepage:     f.Homepage,
+		Version:      f.Versions.Stable,
+		URL:          url,
+		SHA256:       sha256,
+		Dependencies: f.Dependencies,
+	}
+}
+
+func getPlatformCandidates() []string {
+	switch runtime.GOOS {
+	case "darwin":
+		if runtime.GOARCH == "arm64" {
+			return []string{"arm64_sequoia", "arm64_sonoma", "arm64_ventura", "arm64_monterey"}
+		}
+		return []string{"sequoia", "sonoma", "ventura", "monterey"}
+	case "linux":
+		if runtime.GOARCH == "amd64" {
+			return []string{"x86_64_linux"}
+		}
+		if runtime.GOARCH == "arm64" {
+			return []string{"aarch64_linux"}
+		}
+	}
+	return []string{}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -44,6 +45,20 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, pkg domain.Package) domain.Fetc
 	resp, err := f.client.Do(req)
 	if err != nil {
 		return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Error: err}
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized && strings.Contains(pkg.DownloadURL, "ghcr.io") {
+		resp.Body.Close()
+		token, err := f.getGHCRToken(ctx, resp.Header.Get("WWW-Authenticate"))
+		if err != nil {
+			return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Error: err}
+		}
+		req, _ = http.NewRequestWithContext(ctx, "GET", pkg.DownloadURL, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err = f.client.Do(req)
+		if err != nil {
+			return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Error: err}
+		}
 	}
 	defer resp.Body.Close()
 
@@ -105,6 +120,46 @@ func computeChecksum(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// Detailed here
+// https://stackoverflow.com/questions/79168476/how-to-get-api-token-to-github-container-registry
+func (f *HTTPFetcher) getGHCRToken(ctx context.Context, wwwAuth string) (string, error) {
+	// Bearer realm="...",service="...",scope="..."
+	params := make(map[string]string)
+	for _, part := range strings.Split(wwwAuth, ",") {
+		part = strings.TrimSpace(part)
+		part = strings.TrimPrefix(part, "Bearer ")
+		if idx := strings.Index(part, "="); idx > 0 {
+			key := part[:idx]
+			val := strings.Trim(part[idx+1:], `"`)
+			params[key] = val
+		}
+	}
+
+	tokenURL := fmt.Sprintf("%s?service=%s&scope=%s", params["realm"], params["service"], params["scope"])
+	req, err := http.NewRequestWithContext(ctx, "GET", tokenURL, nil)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := f.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("token request failed: %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+	return result.Token, nil
 }
 
 func extFromURL(rawURL string) string {
