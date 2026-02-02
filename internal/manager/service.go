@@ -60,7 +60,9 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		return nil, err
 	}
 
-	binPath, err := findBinary(m.packagesDir)
+	pkgPath := filepath.Join(m.packagesDir, pkg.Name, pkg.Version)
+
+	binPath, err := findBinary(pkgPath)
 	if err != nil {
 		return nil, err
 	}
@@ -69,8 +71,6 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 	if err != nil {
 		return nil, err
 	}
-
-	pkgPath := filepath.Join(m.packagesDir, pkg.Name, pkg.Version)
 
 	installedPkg := &domain.InstalledPackage{
 		Name:        pkg.Name,
@@ -155,62 +155,47 @@ func findBinary(dir string) (string, error) {
 		return "", err
 	}
 
-	var visible []os.DirEntry
+	var binDir os.DirEntry
+
 	for _, e := range entries {
-		if !strings.HasPrefix(e.Name(), ".") {
-			visible = append(visible, e)
-		}
-	}
-
-	if len(visible) == 0 {
-		return "", fmt.Errorf("no files found in %s", dir)
-	}
-
-	for _, e := range visible {
 		if e.Name() == "bin" && e.IsDir() {
-			binEntries, err := os.ReadDir(filepath.Join(dir, "bin"))
-			if err != nil {
-				return "", err
-			}
-			for _, be := range binEntries {
-				if !strings.HasPrefix(be.Name(), ".") {
-					return filepath.Join(dir, "bin", be.Name()), nil
-				}
-			}
+			binDir = e
+			break
 		}
 	}
 
-	if runtime.GOOS == "darwin" {
-		for _, e := range visible {
-			if strings.HasSuffix(e.Name(), ".app") && e.IsDir() {
-				appName := strings.TrimSuffix(e.Name(), ".app")
-				cliName := strings.ToLower(appName)
-
-				resourcesDir := filepath.Join(dir, e.Name(), "Contents", "Resources")
-				if resEntries, err := os.ReadDir(resourcesDir); err == nil {
-					for _, re := range resEntries {
-						if re.Name() == cliName && !re.IsDir() {
-							binPath := filepath.Join(resourcesDir, re.Name())
-							if info, err := os.Stat(binPath); err == nil && info.Mode()&0111 != 0 {
-								return binPath, nil
-							}
-						}
-					}
-				}
-
-				macosDir := filepath.Join(dir, e.Name(), "Contents", "MacOS")
-				binEntries, err := os.ReadDir(macosDir)
-				if err != nil {
-					return "", err
-				}
-				for _, be := range binEntries {
-					if !strings.HasPrefix(be.Name(), ".") {
-						return filepath.Join(macosDir, be.Name()), nil
-					}
-				}
-			}
-		}
+	if binDir == nil {
+		return "", fmt.Errorf("bin directory not found in %s", dir)
 	}
 
-	return filepath.Join(dir, visible[0].Name()), nil
+	binPath := filepath.Join(dir, binDir.Name())
+	binEntries, err := os.ReadDir(binPath)
+	if err != nil {
+		return "", err
+	}
+
+	for _, e := range binEntries {
+		if e.IsDir() {
+			continue
+		}
+
+		name := e.Name()
+		if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(name), ".exe") {
+			continue
+		}
+
+		fullPath := filepath.Join(binPath, name)
+		info, err := os.Stat(fullPath)
+		if err != nil {
+			continue
+		}
+
+		if runtime.GOOS != "windows" && info.Mode()&0111 == 0 {
+			continue
+		}
+
+		return fullPath, nil
+	}
+
+	return "", fmt.Errorf("no executable found in %s", binPath)
 }
