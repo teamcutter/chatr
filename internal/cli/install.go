@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"path/filepath"
 	"sync"
-	"time"
 
-	"github.com/fatih/color"
-	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"github.com/teamcutter/chatr/internal/domain"
+	"golang.org/x/sync/errgroup"
 )
 
 func newInstallCmd() *cobra.Command {
@@ -24,90 +22,69 @@ func newInstallCmd() *cobra.Command {
 				return err
 			}
 
-			wg := &sync.WaitGroup{}
-			mu := &sync.Mutex{}
-			errCh := make(chan error, len(args))
+			// Btw can use workers pool but
+			// it doesn't seem to be needed here
+			g, ctx := errgroup.WithContext(cmd.Context())
+			g.SetLimit(min(len(args), cfg.MaxParallel))
 
-			green := color.New(color.FgGreen).SprintFunc()
-			cyan := color.New(color.FgCyan).SprintFunc()
-			red := color.New(color.FgRed).SprintFunc()
-			bold := color.New(color.Bold).SprintFunc()
+			mu := &sync.Mutex{}
+			var errs []error
+			var success []string
 
 			for _, name := range args {
+				g.Go(func() error {
 
-				wg.Add(1)
-				go func(name string) {
-					defer wg.Done()
-
-					spinner := progressbar.NewOptions(-1,
-						progressbar.OptionSetDescription(fmt.Sprintf("Fetching %s...", name)),
-						progressbar.OptionSpinnerType(14),
-						progressbar.OptionClearOnFinish(),
-					)
-					done := make(chan struct{})
-					go func() {
-						for {
-							select {
-							case <-done:
-								return
-							case <-cmd.Context().Done():
-								return
-							default:
-								spinner.Add(1)
-								time.Sleep(100 * time.Millisecond)
-							}
-						}
-					}()
-
-					formula, err := reg.Get(cmd.Context(), name)
-					close(done)
-					spinner.Finish()
+					stop := withSpinner(cmd.Context(), fmt.Sprintf("Fetching %s...", name))
+					formula, err := reg.Get(ctx, name)
+					stop()
 					if err != nil {
-						errCh <- fmt.Errorf("%s: %v", name, err)
-						return
+						mu.Lock()
+						errs = append(errs, fmt.Errorf("%s: %v", name, err))
+						mu.Unlock()
+						return nil
 					}
 
-					var installVersion string
-					if version == "latest" {
-						installVersion = formula.Version
-					} else {
+					installVersion := formula.Version
+					if version != "latest" {
 						installVersion = version
 					}
 
-					pkg, err := mgr.Install(cmd.Context(), domain.Package{
+					pkg, err := mgr.Install(ctx, domain.Package{
 						Name:        formula.Name,
 						DownloadURL: formula.URL,
 						Version:     installVersion,
 						SHA256:      formula.SHA256,
 					})
 					if err != nil {
-						errCh <- fmt.Errorf("%s: %v", name, err)
-						return
+						mu.Lock()
+						errs = append(errs, fmt.Errorf("%s: %v", name, err))
+						mu.Unlock()
+						return nil
 					}
 
 					mu.Lock()
-					fmt.Printf("\n%s %s%s%s\n", green("✓"), bold(pkg.Name), bold("@"), bold(pkg.Version))
-					fmt.Printf("  %s %s\n", cyan("cache:"), filepath.Join(cfg.CacheDir, pkg.Name, pkg.Version))
-					fmt.Printf("  %s %s\n", cyan("path:"), filepath.Join(cfg.PackagesDir, pkg.Name, pkg.Version))
+					success = append(success, fmt.Sprintf("%s %s%s%s\n  %s %s\n  %s %s",
+						green("✓"), bold(pkg.Name), bold("@"), bold(pkg.Version),
+						cyan("cache:"), filepath.Join(cfg.CacheDir, pkg.Name, pkg.Version),
+						cyan("path:"), filepath.Join(cfg.PackagesDir, pkg.Name, pkg.Version)))
 					mu.Unlock()
 
-				}(name)
+					return nil
+				})
 			}
 
-			wg.Wait()
-			close(errCh)
+			_ = g.Wait()
 
-			var errs []error
-			for err := range errCh {
-				errs = append(errs, err)
+			fmt.Println()
+			for _, s := range success {
+				fmt.Printf("%s\n", s)
 			}
 
 			if len(errs) > 0 {
-				fmt.Println()
 				for _, e := range errs {
 					fmt.Printf("%s %s\n", red("✗"), e)
 				}
-				return fmt.Errorf("failed to install %d package(s)", len(errs))
+				return fmt.Errorf("failed to install %d package(s)\n", len(errs))
 			}
 
 			return nil

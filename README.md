@@ -56,9 +56,9 @@ chatr install <name>...
 | `--version` | `-v` | `latest` | Package version |
 | `--sha256` | | | Expected SHA256 checksum |
 
-### uninstall
+### remove
 
-Uninstall one or more packages.
+Remove one or more installed packages.
 
 ```bash
 chatr remove <name>...
@@ -66,7 +66,7 @@ chatr remove <name>...
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--version` | `-v` | `latest` | Package version to uninstall |
+| `--version` | `-v` | `latest` | Package version to remove |
 
 ### list
 
@@ -87,6 +87,22 @@ chatr search <query>
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--show` | `-s` | `50` | Number of results to display |
+
+### clear
+
+Clear the packages cache.
+
+```bash
+chatr clear
+```
+
+### version
+
+Print the version of chatr.
+
+```bash
+chatr version
+```
 
 ## License
 

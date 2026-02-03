@@ -1,0 +1,29 @@
+version: 2
+
+builds:
+  - main: ./cmd/chatr
+    binary: chatr
+    ldflags:
+      - -s -w
+      - -X github.com/teamcutter/chatr/internal/version.Version={{.Version}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"

@@ -21,6 +21,7 @@ type InstalledPackage struct {
 	Version     string    `json:"version"`
 	URL         string    `json:"url"`
 	Path        string    `json:"path"`
+	Binaries    []string  `json:"binaries"`
 	InstalledAt time.Time `json:"installed_at"`
 }
 
@@ -30,6 +31,11 @@ type Manifest struct {
 
 func NewManifest() *Manifest {
 	return &Manifest{Packages: make(map[string]*InstalledPackage)}
+}
+
+type RegistryConfig struct {
+	Name string `toml:"name"`
+	URL  string `toml:"url"`
 }
 
 type Formula struct {

@@ -62,14 +62,19 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 
 	pkgPath := filepath.Join(m.packagesDir, pkg.Name, pkg.Version)
 
-	binPath, err := findBinary(pkgPath)
+	binaries, err := findBinaries(pkgPath)
 	if err != nil {
+		os.RemoveAll(pkgPath)
 		return nil, err
 	}
 
-	err = m.createSystemLink(binPath, pkg.Name)
-	if err != nil {
-		return nil, err
+	var binaryNames []string
+	for _, binPath := range binaries {
+		binName := filepath.Base(binPath)
+		if err := m.createSymlink(binPath, binName); err != nil {
+			return nil, err
+		}
+		binaryNames = append(binaryNames, binName)
 	}
 
 	installedPkg := &domain.InstalledPackage{
@@ -77,6 +82,7 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		Version:     pkg.Version,
 		URL:         pkg.DownloadURL,
 		Path:        pkgPath,
+		Binaries:    binaryNames,
 		InstalledAt: time.Now(),
 	}
 
@@ -89,22 +95,16 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 }
 
 func (m *Manager) Remove(ctx context.Context, pkg domain.Package) (string, string, error) {
-	if m.cache.Has(pkg.Name, pkg.Version) {
-		cachePath := m.cache.GetPath(pkg.Name, pkg.Version)
-		cacheDir := filepath.Dir(filepath.Dir(cachePath))
-		if err := os.RemoveAll(cacheDir); err != nil && !os.IsNotExist(err) {
-			return "", "", err
-		}
-	}
-
 	installed, installedPkg, _ := m.state.IsInstalled(pkg.Name)
 	if !installed {
 		return "", "", fmt.Errorf("package %s is not installed", pkg.Name)
 	}
 
-	binaryPath := filepath.Join(m.binDir, installedPkg.Name)
-	if err := os.Remove(binaryPath); err != nil && !os.IsNotExist(err) {
-		return "", "", err
+	for _, binName := range installedPkg.Binaries {
+		binaryPath := filepath.Join(m.binDir, binName)
+		if err := os.Remove(binaryPath); err != nil && !os.IsNotExist(err) {
+			return "", "", err
+		}
 	}
 
 	packageDir := filepath.Join(m.packagesDir, pkg.Name)
@@ -118,6 +118,10 @@ func (m *Manager) Remove(ctx context.Context, pkg domain.Package) (string, strin
 	}
 
 	return installedPkg.Name, installedPkg.Version, nil
+}
+
+func (m *Manager) Clear(ctx context.Context) error {
+	return m.cache.Clear()
 }
 
 func (m *Manager) List() ([]string, error) {
@@ -135,12 +139,12 @@ func (m *Manager) List() ([]string, error) {
 	return packages, nil
 }
 
-func (m *Manager) createSystemLink(path, pkgName string) error {
+func (m *Manager) createSymlink(path, binName string) error {
 	if err := os.MkdirAll(m.binDir, 0755); err != nil {
 		return fmt.Errorf("failed to create bin directory: %w", err)
 	}
 
-	linkPath := filepath.Join(m.binDir, pkgName)
+	linkPath := filepath.Join(m.binDir, binName)
 
 	if _, err := os.Lstat(linkPath); err == nil {
 		os.Remove(linkPath)
@@ -149,32 +153,30 @@ func (m *Manager) createSystemLink(path, pkgName string) error {
 	return os.Symlink(path, linkPath)
 }
 
-func findBinary(dir string) (string, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return "", err
+func findBinaries(dir string) ([]string, error) {
+	candidates := []string{
+		filepath.Join(dir, "bin"),
+		filepath.Join(dir, "libexec", "bin"),
+		filepath.Join(dir, "libexec"),
 	}
 
-	var binDir os.DirEntry
-
-	for _, e := range entries {
-		if e.Name() == "bin" && e.IsDir() {
-			binDir = e
-			break
+	for _, binPath := range candidates {
+		if executables := findExecutablesIn(binPath); len(executables) > 0 {
+			return executables, nil
 		}
 	}
 
-	if binDir == nil {
-		return "", fmt.Errorf("bin directory not found in %s", dir)
-	}
+	return nil, fmt.Errorf("no executables found in %s", dir)
+}
 
-	binPath := filepath.Join(dir, binDir.Name())
-	binEntries, err := os.ReadDir(binPath)
+func findExecutablesIn(binPath string) []string {
+	entries, err := os.ReadDir(binPath)
 	if err != nil {
-		return "", err
+		return nil
 	}
 
-	for _, e := range binEntries {
+	var executables []string
+	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
@@ -194,8 +196,8 @@ func findBinary(dir string) (string, error) {
 			continue
 		}
 
-		return fullPath, nil
+		executables = append(executables, fullPath)
 	}
 
-	return "", fmt.Errorf("no executable found in %s", binPath)
+	return executables
 }

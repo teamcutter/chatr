@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/teamcutter/chatr/internal/domain"
 )
@@ -17,25 +16,18 @@ func newRemoveCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mgr, _, _, _ := newManager()
 
-			green := color.New(color.FgGreen).SprintFunc()
-			red := color.New(color.FgRed).SprintFunc()
-			bold := color.New(color.Bold).SprintFunc()
-
-			fmt.Printf("Removing %d package(s)...\n", len(args))
-
 			var failed int
 			for _, arg := range args {
 				rmName, rmVersion, err := mgr.Remove(cmd.Context(), domain.Package{
 					Name:    arg,
 					Version: version,
 				})
-
 				if err != nil {
-					fmt.Printf("\n%s %s: %v\n", red("✗"), arg, err)
+					fmt.Printf("%s %s: %v\n", red("✗"), arg, err)
 					failed++
 					continue
 				}
-				fmt.Printf("\n%s %s%s%s\n", green("✓"), bold(rmName), bold("@"), bold(rmVersion))
+				fmt.Printf("%s %s%s%s removed\n", green("✓"), bold(rmName), bold("@"), bold(rmVersion))
 			}
 
 			if failed > 0 {

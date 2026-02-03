@@ -21,6 +21,8 @@ func Execute() error {
 		newRemoveCmd(),
 		newListCmd(),
 		newSearchCmd(),
+		newClearCmd(),
+		newVersionCmd(),
 	)
 	return rootCmd.Execute()
 }

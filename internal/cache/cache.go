@@ -85,6 +85,15 @@ func (c *DiskCache) Size() (int64, error) {
 	return size, err
 }
 
+func (c *DiskCache) Clear() error {
+	err := os.RemoveAll(c.dir)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func getArchiveExt(path string) string {
 	lower := filepath.Base(path)
 	for _, ext := range domain.Extensions() {

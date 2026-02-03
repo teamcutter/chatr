@@ -1,26 +1,22 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/BurntSushi/toml"
+	"github.com/teamcutter/chatr/internal/domain"
 )
 
 type Config struct {
-	CacheDir        string     `toml:"cache_dir"`
-	ChatrDir        string     `toml:"chatr_dir"`
-	PackagesDir     string     `toml:"packages_dir"`
-	BinDir          string     `toml:"bin_dir"`
-	ManifestFile    string     `toml:"manifest_file"`
-	Registries      []Registry `toml:"registries"`
-	DefaultRegistry string     `toml:"default_registry"`
-}
-
-type Registry struct {
-	Name string `toml:"name"`
-	URL  string `toml:"url"`
+	CacheDir        string                  `toml:"cache_dir"`
+	ChatrDir        string                  `toml:"chatr_dir"`
+	PackagesDir     string                  `toml:"packages_dir"`
+	BinDir          string                  `toml:"bin_dir"`
+	ManifestFile    string                  `toml:"manifest_file"`
+	MaxParallel     int                     `toml:"max_parallel"`
+	Registries      []domain.RegistryConfig `toml:"registries"`
+	DefaultRegistry string                  `toml:"default_registry"`
 }
 
 func DefaultConfig() *Config {
@@ -30,18 +26,14 @@ func DefaultConfig() *Config {
 	cfg := &Config{
 		CacheDir:     filepath.Join(base, "cache"),
 		ChatrDir:     base,
+		PackagesDir:  filepath.Join(base, "packages"),
 		BinDir:       filepath.Join(base, "bin"),
 		ManifestFile: filepath.Join(base, "installed.json"),
-		PackagesDir:  filepath.Join(base, "packages"),
-		Registries: []Registry{
+		MaxParallel:  8,
+		Registries: []domain.RegistryConfig{
 			{Name: "homebrew", URL: "https://formulae.brew.sh/api/"},
 		},
 		DefaultRegistry: "homebrew",
-	}
-
-	err := Save(cfg)
-	if err != nil {
-		fmt.Println(err) // TODO: Improve
 	}
 
 	return cfg
@@ -60,6 +52,9 @@ func Load() (*Config, error) {
 	configPath := filepath.Join(base, "config.toml")
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		if err := Save(cfg); err != nil {
+			return nil, err
+		}
 		return cfg, nil
 	}
 

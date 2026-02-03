@@ -2,10 +2,7 @@ package cli
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/fatih/color"
-	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
 
@@ -21,37 +18,12 @@ func newSearchCmd() *cobra.Command {
 				return err
 			}
 
-			spinner := progressbar.NewOptions(-1,
-				progressbar.OptionSetDescription(fmt.Sprintf("Searching %s...", args[0])),
-				progressbar.OptionSpinnerType(14),
-				progressbar.OptionClearOnFinish(),
-			)
-			done := make(chan struct{})
-			go func() {
-				for {
-					select {
-					case <-done:
-						return
-					case <-cmd.Context().Done():
-						return
-					default:
-						spinner.Add(1)
-						time.Sleep(100 * time.Millisecond)
-					}
-				}
-			}()
-
+			stop := withSpinner(cmd.Context(), fmt.Sprintf("Searching %s...", args[0]))
 			results, err := reg.Search(cmd.Context(), args[0])
-			close(done)
-			spinner.Finish()
+			stop()
 			if err != nil {
 				return err
 			}
-
-			green := color.New(color.FgGreen).SprintFunc()
-			cyan := color.New(color.FgCyan).SprintFunc()
-			bold := color.New(color.Bold).SprintFunc()
-			dim := color.New(color.Faint).SprintFunc()
 
 			if len(results) == 0 {
 				fmt.Printf("%s No results found for %q\n", dim("○"), args[0])
@@ -82,6 +54,6 @@ func newSearchCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().IntVarP(&show, "show", "s", 50, "Shows first n packages")
+	cmd.Flags().IntVarP(&show, "show", "s", 5, "Shows first n packages")
 	return cmd
 }

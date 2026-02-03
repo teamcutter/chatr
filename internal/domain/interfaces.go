@@ -13,6 +13,7 @@ type Cache interface {
 	GetPath(name, version string) string
 	Store(name, version, src string) (string, error)
 	Size() (int64, error)
+	Clear() error
 }
 
 type Extractor interface {
