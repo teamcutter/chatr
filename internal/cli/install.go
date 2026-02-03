@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/fatih/color"
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"github.com/teamcutter/chatr/internal/domain"
 )
@@ -37,7 +39,29 @@ func newInstallCmd() *cobra.Command {
 				go func(name string) {
 					defer wg.Done()
 
+					spinner := progressbar.NewOptions(-1,
+						progressbar.OptionSetDescription(fmt.Sprintf("Fetching %s...", name)),
+						progressbar.OptionSpinnerType(14),
+						progressbar.OptionClearOnFinish(),
+					)
+					done := make(chan struct{})
+					go func() {
+						for {
+							select {
+							case <-done:
+								return
+							case <-cmd.Context().Done():
+								return
+							default:
+								spinner.Add(1)
+								time.Sleep(100 * time.Millisecond)
+							}
+						}
+					}()
+
 					formula, err := reg.Get(cmd.Context(), name)
+					close(done)
+					spinner.Finish()
 					if err != nil {
 						errCh <- fmt.Errorf("%s: %v", name, err)
 						return

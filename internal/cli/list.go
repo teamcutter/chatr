@@ -14,10 +14,16 @@ func newListCmd() *cobra.Command {
 			mgr, _, _, _ := newManager()
 
 			bold := color.New(color.Bold).SprintFunc()
+			dim := color.New(color.Faint).SprintFunc()
 
 			packages, err := mgr.List()
 			if err != nil {
 				return err
+			}
+
+			if len(packages) == 0 {
+				fmt.Printf("%s No packages installed\n", dim("○"))
+				return nil
 			}
 
 			fmt.Printf("Installed packages:\n\n")
