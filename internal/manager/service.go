@@ -88,7 +88,7 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 	return installedPkg, nil
 }
 
-func (m *Manager) Uninstall(ctx context.Context, pkg domain.Package) (string, string, error) {
+func (m *Manager) Remove(ctx context.Context, pkg domain.Package) (string, string, error) {
 	if m.cache.Has(pkg.Name, pkg.Version) {
 		cachePath := m.cache.GetPath(pkg.Name, pkg.Version)
 		cacheDir := filepath.Dir(filepath.Dir(cachePath))

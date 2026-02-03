@@ -128,6 +128,15 @@ func (h *HomebrewRegistry) Search(ctx context.Context, query string) ([]domain.F
 	return h.filterAndSort(formulae, query), nil
 }
 
+func (h *HomebrewRegistry) GetVersions(ctx context.Context, name string) ([]string, error) {
+	formula, err := h.Get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	return []string{formula.Version}, nil
+}
+
 func (h *HomebrewRegistry) filterAndSort(formulae []Formulae, query string) []domain.Formula {
 	query = strings.ToLower(query)
 	var results []domain.Formula
@@ -159,15 +168,6 @@ func (h *HomebrewRegistry) filterAndSort(formulae []Formulae, query string) []do
 	})
 
 	return results
-}
-
-func (h *HomebrewRegistry) GetVersions(ctx context.Context, name string) ([]string, error) {
-	formula, err := h.Get(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-
-	return []string{formula.Version}, nil
 }
 
 func (h *HomebrewRegistry) getFromCache(ttl time.Duration) ([]byte, bool) {

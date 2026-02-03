@@ -18,7 +18,7 @@ func Execute() error {
 	rootCmd := &cobra.Command{Use: "chatr"}
 	rootCmd.AddCommand(
 		newInstallCmd(),
-		newUninstallCmd(),
+		newRemoveCmd(),
 		newListCmd(),
 		newSearchCmd(),
 	)

@@ -34,8 +34,8 @@ Add this line to your shell configuration file (`~/.bashrc`, `~/.zshrc`, etc.) t
 Downloading hello 100% |█████████████████████████████████████████████| (53/53 kB, 540 kB/s)
 
 ✓ hello@2.12.2
-  cache: /Users/ruslan/.chatr/cache/hello/2.12.2
-  path: /Users/ruslan/.chatr/packages/hello/2.12.2
+  cache: /Users/user/.chatr/cache/hello/2.12.2
+  path: /Users/user/.chatr/packages/hello/2.12.2
 
 ~/ hello
 Hello, world!
@@ -61,7 +61,7 @@ chatr install <name>...
 Uninstall one or more packages.
 
 ```bash
-chatr uninstall <name>...
+chatr remove <name>...
 ```
 
 | Flag | Short | Default | Description |
