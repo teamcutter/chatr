@@ -23,6 +23,7 @@ func Execute() error {
 		newSearchCmd(),
 		newClearCmd(),
 		newVersionCmd(),
+		newNewCommand(),
 	)
 	return rootCmd.Execute()
 }
