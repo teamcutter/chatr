@@ -19,13 +19,13 @@ func newListCmd() *cobra.Command {
 			}
 
 			if len(packages) == 0 {
-				fmt.Printf("%s No packages installed\n", dim("○"))
+				fmt.Printf("\n%s No packages installed\n", dim("○"))
 				return nil
 			}
 
 			fmt.Printf("Installed packages:\n\n")
 			for _, v := range packages {
-				fmt.Printf("  %s\n", bold(v))
+				fmt.Printf(" %s\n", bold(v))
 			}
 
 			return nil

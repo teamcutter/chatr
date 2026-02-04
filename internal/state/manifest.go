@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/teamcutter/chatr/internal/domain"
 )
 
 type ManifestState struct {
+	sync.RWMutex
 	path string
 }
 
@@ -19,6 +21,12 @@ func New(path string) *ManifestState {
 }
 
 func (m *ManifestState) Load() (*domain.Manifest, error) {
+	m.RLock()
+	defer m.RUnlock()
+	return m.load()
+}
+
+func (m *ManifestState) load() (*domain.Manifest, error) {
 	data, err := os.ReadFile(m.path)
 	if os.IsNotExist(err) {
 		return domain.NewManifest(), nil
@@ -40,6 +48,12 @@ func (m *ManifestState) Load() (*domain.Manifest, error) {
 }
 
 func (m *ManifestState) Save(manifest *domain.Manifest) error {
+	m.Lock()
+	defer m.Unlock()
+	return m.save(manifest)
+}
+
+func (m *ManifestState) save(manifest *domain.Manifest) error {
 	if err := os.MkdirAll(filepath.Dir(m.path), 0755); err != nil {
 		return err
 	}
@@ -53,19 +67,16 @@ func (m *ManifestState) Save(manifest *domain.Manifest) error {
 }
 
 func (m *ManifestState) IsInstalled(name string) (bool, *domain.InstalledPackage, error) {
-	data, err := os.ReadFile(m.path)
-	if os.IsNotExist(err) {
-		return false, nil, err
-	}
+	m.RLock()
+	defer m.RUnlock()
 
-	var manifest domain.Manifest
-	err = json.Unmarshal(data, &manifest)
+	manifest, err := m.load()
 	if err != nil {
 		return false, nil, err
 	}
 
-	pkg, existed := manifest.Packages[name]
-	if !existed {
+	pkg, exists := manifest.Packages[name]
+	if !exists {
 		return false, nil, nil
 	}
 
@@ -73,23 +84,27 @@ func (m *ManifestState) IsInstalled(name string) (bool, *domain.InstalledPackage
 }
 
 func (m *ManifestState) Add(pkg *domain.InstalledPackage) error {
-	manifest, err := m.Load()
+	m.Lock()
+	defer m.Unlock()
+
+	manifest, err := m.load()
 	if err != nil {
 		return err
 	}
 
 	manifest.Packages[pkg.Name] = pkg
-
-	return m.Save(manifest)
+	return m.save(manifest)
 }
 
 func (m *ManifestState) Remove(name string) error {
-	manifest, err := m.Load()
+	m.Lock()
+	defer m.Unlock()
+
+	manifest, err := m.load()
 	if err != nil {
 		return err
 	}
 
 	delete(manifest.Packages, name)
-
-	return m.Save(manifest)
+	return m.save(manifest)
 }

@@ -4,11 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 
 	"github.com/teamcutter/chatr/internal/domain"
 )
 
 type DiskCache struct {
+	sync.RWMutex
 	dir string
 }
 
@@ -21,6 +23,12 @@ func New(dir string) (*DiskCache, error) {
 }
 
 func (c *DiskCache) GetPath(name, version string) string {
+	c.RLock()
+	defer c.RUnlock()
+	return c.getPath(name, version)
+}
+
+func (c *DiskCache) getPath(name, version string) string {
 	actual := version
 	if version == "latest" {
 		entries, _ := os.ReadDir(filepath.Join(c.dir, name))
@@ -48,11 +56,16 @@ func (c *DiskCache) GetPath(name, version string) string {
 }
 
 func (c *DiskCache) Has(name, version string) bool {
-	_, err := os.Stat(c.GetPath(name, version))
+	c.RLock()
+	defer c.RUnlock()
+	_, err := os.Stat(c.getPath(name, version))
 	return err == nil
 }
 
 func (c *DiskCache) Store(name, version, src string) (string, error) {
+	c.Lock()
+	defer c.Unlock()
+
 	ext := getArchiveExt(src)
 	destDir := filepath.Join(c.dir, name, version)
 	destPath := filepath.Join(destDir, "package"+ext)
@@ -69,6 +82,9 @@ func (c *DiskCache) Store(name, version, src string) (string, error) {
 }
 
 func (c *DiskCache) Size() (int64, error) {
+	c.RLock()
+	defer c.RUnlock()
+
 	var size int64
 
 	err := filepath.Walk(c.dir, func(_ string, info os.FileInfo, err error) error {
@@ -86,12 +102,10 @@ func (c *DiskCache) Size() (int64, error) {
 }
 
 func (c *DiskCache) Clear() error {
-	err := os.RemoveAll(c.dir)
-	if err != nil {
-		return err
-	}
+	c.Lock()
+	defer c.Unlock()
 
-	return nil
+	return os.RemoveAll(c.dir)
 }
 
 func getArchiveExt(path string) string {

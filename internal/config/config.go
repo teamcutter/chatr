@@ -3,10 +3,13 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/BurntSushi/toml"
 	"github.com/teamcutter/chatr/internal/domain"
 )
+
+var configMu sync.Mutex
 
 type Config struct {
 	CacheDir        string                  `toml:"cache_dir"`
@@ -40,6 +43,9 @@ func DefaultConfig() *Config {
 }
 
 func Load() (*Config, error) {
+	configMu.Lock()
+	defer configMu.Unlock()
+
 	cfg := DefaultConfig()
 
 	home, err := os.UserHomeDir()
@@ -48,11 +54,10 @@ func Load() (*Config, error) {
 	}
 
 	base := filepath.Join(home, ".chatr")
-
 	configPath := filepath.Join(base, "config.toml")
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		if err := Save(cfg); err != nil {
+		if err := save(cfg); err != nil {
 			return nil, err
 		}
 		return cfg, nil
@@ -66,6 +71,12 @@ func Load() (*Config, error) {
 }
 
 func Save(cfg *Config) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+	return save(cfg)
+}
+
+func save(cfg *Config) error {
 	home, _ := os.UserHomeDir()
 	base := filepath.Join(home, ".chatr")
 

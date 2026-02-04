@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/teamcutter/chatr/internal/domain"
@@ -20,6 +21,7 @@ import (
 const baseUrl string = "https://formulae.brew.sh/api/"
 
 type HomebrewRegistry struct {
+	sync.RWMutex
 	client   *http.Client
 	cacheDir string
 }
@@ -173,6 +175,9 @@ func (h *HomebrewRegistry) filterAndSort(formulae []Formulae, query string) []do
 }
 
 func (h *HomebrewRegistry) getFromCache(ttl time.Duration) ([]byte, bool) {
+	h.RLock()
+	defer h.RUnlock()
+
 	path := filepath.Join(h.cacheDir, "formulae.json")
 	info, err := os.Stat(path)
 	if err != nil {
@@ -192,6 +197,9 @@ func (h *HomebrewRegistry) getFromCache(ttl time.Duration) ([]byte, bool) {
 }
 
 func (h *HomebrewRegistry) storeToCache(data []byte) error {
+	h.Lock()
+	defer h.Unlock()
+
 	path := filepath.Join(h.cacheDir, "formulae.json")
 	return os.WriteFile(path, data, 0644)
 }

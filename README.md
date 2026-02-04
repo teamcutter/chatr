@@ -64,13 +64,13 @@ chatr install <name>...
 Remove one or more installed packages.
 
 ```bash
-chatr remove <name>...
+chatr remove [name...]
 ```
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--version` | `-v` | `latest` | Package version to remove |
-
+| `--all`| | false | Remove all installed packages |
 ### list
 
 List all installed packages.
