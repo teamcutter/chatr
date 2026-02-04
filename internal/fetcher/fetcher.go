@@ -34,7 +34,7 @@ func New(outputDir string, timeout time.Duration) *HTTPFetcher {
 
 func (f *HTTPFetcher) Fetch(ctx context.Context, pkg domain.Package) domain.FetchResult {
 	ext := extFromURL(pkg.DownloadURL)
-	filename := fmt.Sprintf("%s-%s%s", pkg.Name, pkg.Version, ext)
+	filename := fmt.Sprintf("%s-%s%s", pkg.Name, pkg.FullVersion(), ext)
 	dst := filepath.Join(f.outputDir, filename)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", pkg.DownloadURL, nil)

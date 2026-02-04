@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,7 +33,8 @@ type Formulae struct {
 		Stable string `json:"stable"`
 		Head   string `json:"head"`
 	} `json:"versions"`
-	URLs struct {
+	Revision int `json:"revision"`
+	URLs     struct {
 		Stable struct {
 			URL      string `json:"url"`
 			Checksum string `json:"checksum"`
@@ -215,6 +217,7 @@ func (h *HomebrewRegistry) toFormula(f *Formulae) *domain.Formula {
 		Description:  f.Desc,
 		Homepage:     f.Homepage,
 		Version:      f.Versions.Stable,
+		Revision:     strconv.Itoa(f.Revision),
 		URL:          url,
 		SHA256:       sha256,
 		Dependencies: f.Dependencies,

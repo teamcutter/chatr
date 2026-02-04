@@ -37,7 +37,7 @@ func newSearchCmd() *cobra.Command {
 
 			for i := range size {
 				fmt.Printf("%s %s\n", green("●"), bold(results[i].Name))
-				fmt.Printf("  %s %s\n", cyan("version:"), results[i].Version)
+				fmt.Printf("  %s %s\n", cyan("version:"), results[i].FullVersion())
 				if results[i].Description != "" {
 					fmt.Printf("  %s %s\n", cyan("desc:"), results[i].Description)
 				}

@@ -46,19 +46,23 @@ func newInstallCmd() *cobra.Command {
 					}
 
 					installVersion := formula.Version
+					installRevision := formula.Revision
 					if version != "latest" {
 						installVersion = version
+						installRevision = ""
 					}
 
-					if sha256 == "" {
-						sha256 = formula.SHA256
+					checksum := sha256
+					if checksum == "" {
+						checksum = formula.SHA256
 					}
 
 					pkg, err := mgr.Install(ctx, domain.Package{
 						Name:        formula.Name,
-						DownloadURL: formula.URL,
 						Version:     installVersion,
-						SHA256:      sha256,
+						Revision:    installRevision,
+						DownloadURL: formula.URL,
+						SHA256:      checksum,
 					})
 					if err != nil {
 						mu.Lock()
@@ -69,9 +73,9 @@ func newInstallCmd() *cobra.Command {
 
 					mu.Lock()
 					success = append(success, fmt.Sprintf("%s %s%s%s\n  %s %s\n  %s %s",
-						green("✓"), bold(pkg.Name), bold("@"), bold(pkg.Version),
-						cyan("cache:"), filepath.Join(cfg.CacheDir, pkg.Name, pkg.Version),
-						cyan("path:"), filepath.Join(cfg.PackagesDir, pkg.Name, pkg.Version)))
+						green("✓"), bold(pkg.Name), bold("@"), bold(pkg.FullVersion()),
+						cyan("cache:"), filepath.Join(cfg.CacheDir, pkg.Name, pkg.FullVersion()),
+						cyan("path:"), filepath.Join(cfg.PackagesDir, pkg.Name, pkg.FullVersion())))
 					mu.Unlock()
 
 					return nil
