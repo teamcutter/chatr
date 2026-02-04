@@ -37,9 +37,9 @@ func newClearCmd() *cobra.Command {
 
 func formatSize(bytes int64) string {
 	const (
-		KB = 1024
-		MB = KB * 1024
-		GB = MB * 1024
+		KB = 1 << 10
+		MB = 1 << 20
+		GB = 1 << 30
 	)
 
 	switch {
