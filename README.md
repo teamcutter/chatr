@@ -2,7 +2,21 @@
 
 A package manager CLI for downloading, installing, and managing binary packages.
 
-## Setup
+## Installation
+
+```bash
+curl -sL https://raw.githubusercontent.com/teamcutter/chatr/main/install.sh | sh
+```
+
+Add the chatr bin directory to your PATH:
+
+```bash
+export PATH="$HOME/.chatr/bin:$PATH"
+```
+
+Add this line to your shell configuration file (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent.
+
+## Build from Source
 
 ### Prerequisites
 
@@ -12,18 +26,7 @@ A package manager CLI for downloading, installing, and managing binary packages.
 
 ```bash
 mkdir -p ~/.chatr/bin && go build -o ~/.chatr/bin/chatr ./cmd/chatr
-
 ```
-
-### Install
-
-Add the chatr bin directory to your PATH:
-
-```bash
-export PATH="$HOME/.chatr/bin:$PATH"
-```
-
-Add this line to your shell configuration file (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent.
 
 ## Usage
 
@@ -102,6 +105,14 @@ Print the version of chatr.
 
 ```bash
 chatr version
+```
+
+### new
+
+Update chatr to the newest version.
+
+```bash
+chatr new
 ```
 
 ## License
