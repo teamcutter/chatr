@@ -163,6 +163,12 @@ func (f *HTTPFetcher) getGHCRToken(ctx context.Context, wwwAuth string) (string,
 }
 
 func extFromURL(rawURL string) string {
+	// Since our main registry is brew
+	// it provides blobs and they are always tar.gz
+	if strings.Contains(rawURL, "ghcr.io") && strings.Contains(rawURL, "/blobs/") {
+		return ".tar.gz"
+	}
+
 	u := path.Base(rawURL)
 	for _, ext := range domain.Extensions() {
 		if strings.HasSuffix(u, ext) {

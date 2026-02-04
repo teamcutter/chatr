@@ -56,11 +56,14 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		archivePath, _ = m.cache.Store(pkg.Name, pkg.Version, result.Path)
 	}
 
+	// Ensure that if any previous installations
+	// failed, we extract into clear dir
+	pkgPath := filepath.Join(m.packagesDir, pkg.Name, pkg.Version)
+	os.RemoveAll(pkgPath)
+
 	if err := m.extractor.Extract(archivePath, m.packagesDir); err != nil {
 		return nil, err
 	}
-
-	pkgPath := filepath.Join(m.packagesDir, pkg.Name, pkg.Version)
 
 	binaries, err := findBinaries(pkgPath)
 	if err != nil {
