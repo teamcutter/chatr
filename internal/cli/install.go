@@ -49,11 +49,15 @@ func newInstallCmd() *cobra.Command {
 						installVersion = version
 					}
 
+					if sha256 == "" {
+						sha256 = formula.SHA256
+					}
+
 					pkg, err := mgr.Install(ctx, domain.Package{
 						Name:        formula.Name,
 						DownloadURL: formula.URL,
 						Version:     installVersion,
-						SHA256:      formula.SHA256,
+						SHA256:      sha256,
 					})
 					if err != nil {
 						mu.Lock()
