@@ -8,7 +8,8 @@ import (
 
 func newListCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use: "list",
+		Use:   "list",
+		Short: "List installed packages",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mgr, _, _, _ := newManager()
 

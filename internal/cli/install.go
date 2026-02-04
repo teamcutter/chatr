@@ -14,8 +14,9 @@ func newInstallCmd() *cobra.Command {
 	var version, sha256 string
 
 	cmd := &cobra.Command{
-		Use:  "install <name>...",
-		Args: cobra.MinimumNArgs(1),
+		Use:   "install <name>...",
+		Short: "Install packages",
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mgr, cfg, reg, err := newManager()
 			if err != nil {

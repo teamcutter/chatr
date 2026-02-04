@@ -10,8 +10,9 @@ func newSearchCmd() *cobra.Command {
 	var show int
 
 	cmd := &cobra.Command{
-		Use:  "search <query>",
-		Args: cobra.ExactArgs(1),
+		Use:   "search <query>",
+		Short: "Search for packages",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, _, reg, err := newManager()
 			if err != nil {

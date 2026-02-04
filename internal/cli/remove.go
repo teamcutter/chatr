@@ -11,8 +11,9 @@ func newRemoveCmd() *cobra.Command {
 	var version string
 
 	cmd := &cobra.Command{
-		Use:  "remove <name>",
-		Args: cobra.MinimumNArgs(1),
+		Use:   "remove <name>",
+		Short: "Remove installed packages",
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mgr, _, _, _ := newManager()
 
