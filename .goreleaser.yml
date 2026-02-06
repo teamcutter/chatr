@@ -3,6 +3,8 @@ version: 2
 builds:
   - main: ./cmd/chatr
     binary: chatr
+    env:
+      - CGO_ENABLED=0
     ldflags:
       - -s -w
       - -X github.com/teamcutter/chatr/internal/version.Version={{.Version}}
