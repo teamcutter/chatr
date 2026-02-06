@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os/exec"
+	"runtime"
 
 	"github.com/spf13/cobra"
 	"github.com/teamcutter/chatr/internal/version"
@@ -24,7 +25,8 @@ func newNewCommand() *cobra.Command {
 				return err
 			}
 
-			fmt.Printf("%s chatr updated to version %s\n", green("✓"), bold(version.Version))
+			fmt.Printf("%s chatr updated to version %s%s%s%s%s\n", green("✓"), bold(version.Version), bold("-"),
+				bold(runtime.GOOS), bold("/"), bold(runtime.GOARCH))
 			return nil
 		},
 	}
