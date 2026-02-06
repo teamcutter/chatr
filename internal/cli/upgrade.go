@@ -93,7 +93,7 @@ func newUpgradeCmd() *cobra.Command {
 
 					mu.Lock()
 					upgraded = append(upgraded, fmt.Sprintf("%s %s%s%s → %s\n  %s %s\n  %s %s",
-						green("✓"), bold(pkg.Name), bold("@"), bold(oldVersion), bold(pkg.FullVersion()),
+						green("✓"), bold(pkg.Name), bold("-"), bold(oldVersion), bold(pkg.FullVersion()),
 						cyan("cache:"), filepath.Join(cfg.CacheDir, pkg.Name, pkg.FullVersion()),
 						cyan("path:"), filepath.Join(cfg.PackagesDir, pkg.Name, pkg.FullVersion())))
 					mu.Unlock()

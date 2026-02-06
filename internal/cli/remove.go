@@ -36,7 +36,7 @@ func newRemoveCmd() *cobra.Command {
 				}
 				packages = make([]string, 0, len(installed))
 				for _, pkg := range installed {
-					name := pkg[:strings.LastIndex(pkg, "@")]
+					name := pkg[:strings.LastIndex(pkg, "-")]
 					packages = append(packages, name)
 				}
 			}
@@ -53,7 +53,7 @@ func newRemoveCmd() *cobra.Command {
 					failed++
 					continue
 				}
-				fmt.Printf("%s %s%s%s removed\n", green("✓"), bold(removedPackage.Name), bold("@"), bold(removedPackage.FullVersion()))
+				fmt.Printf("%s %s%s%s removed\n", green("✓"), bold(removedPackage.Name), bold("-"), bold(removedPackage.FullVersion()))
 			}
 
 			if failed > 0 {

@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/spf13/cobra"
@@ -66,14 +67,18 @@ func newInstallCmd() *cobra.Command {
 					})
 					if err != nil {
 						mu.Lock()
-						errs = append(errs, fmt.Errorf("%s: %v", name, err))
+						if strings.Contains(err.Error(), "already installed") {
+							success = append(success, fmt.Sprintf("%s %s already installed", yellow("!"), bold(name)))
+						} else {
+							errs = append(errs, fmt.Errorf("%s: %v", name, err))
+						}
 						mu.Unlock()
 						return nil
 					}
 
 					mu.Lock()
 					success = append(success, fmt.Sprintf("%s %s%s%s\n  %s %s\n  %s %s",
-						green("✓"), bold(pkg.Name), bold("@"), bold(pkg.FullVersion()),
+						green("✓"), bold(pkg.Name), bold("-"), bold(pkg.FullVersion()),
 						cyan("cache:"), filepath.Join(cfg.CacheDir, pkg.Name, pkg.FullVersion()),
 						cyan("path:"), filepath.Join(cfg.PackagesDir, pkg.Name, pkg.FullVersion())))
 					mu.Unlock()

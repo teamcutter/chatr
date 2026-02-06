@@ -13,7 +13,7 @@ func newVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print the version of chatr",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("chatr@%s-%s/%s\n", version.Version, runtime.GOOS, runtime.GOARCH)
+			fmt.Printf("chatr-%s-%s/%s\n", version.Version, runtime.GOOS, runtime.GOARCH)
 		},
 	}
 }
