@@ -77,15 +77,15 @@ func (te *TARExtractor) Extract(src, dst string) error {
 
 // https://gist.github.com/leommoore/f9e57ba2aa4bf197ebc5 - this is AWESOME
 func (te *TARExtractor) getDecompressor(file *os.File) (io.Reader, func(), error) {
-	magic := make([]byte, 6)
-	n, _ := file.Read(magic)
-	magic = magic[:n]
+	header := make([]byte, 6)
+	n, _ := file.Read(header)
+	header = header[:n]
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return nil, nil, err
 	}
 
 	switch {
-	case n >= 4 && magic[0] == 0x28 && magic[1] == 0xb5 && magic[2] == 0x2f && magic[3] == 0xfd:
+	case n >= 4 && header[0] == 0x28 && header[1] == 0xb5 && header[2] == 0x2f && header[3] == 0xfd:
 		// zstd: 0x28B52FFD
 		zr, err := zstd.NewReader(file)
 		if err != nil {
@@ -93,7 +93,7 @@ func (te *TARExtractor) getDecompressor(file *os.File) (io.Reader, func(), error
 		}
 		return zr, func() { zr.Close() }, nil
 
-	case n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b:
+	case n >= 2 && header[0] == 0x1f && header[1] == 0x8b:
 		// gzip: 0x1F8B
 		gzr, err := gzip.NewReader(file)
 		if err != nil {
@@ -101,7 +101,7 @@ func (te *TARExtractor) getDecompressor(file *os.File) (io.Reader, func(), error
 		}
 		return gzr, func() { gzr.Close() }, nil
 
-	case n >= 6 && magic[0] == 0xfd && magic[1] == 0x37 && magic[2] == 0x7a && magic[3] == 0x58 && magic[4] == 0x5a && magic[5] == 0x00:
+	case n >= 6 && header[0] == 0xfd && header[1] == 0x37 && header[2] == 0x7a && header[3] == 0x58 && header[4] == 0x5a && header[5] == 0x00:
 		// xz: 0xFD377A585A00
 		xzr, err := xz.NewReader(file)
 		if err != nil {
@@ -109,7 +109,7 @@ func (te *TARExtractor) getDecompressor(file *os.File) (io.Reader, func(), error
 		}
 		return xzr, nil, nil
 
-	case n >= 2 && magic[0] == 0x42 && magic[1] == 0x5a:
+	case n >= 2 && header[0] == 0x42 && header[1] == 0x5a:
 		// bzip2: 0x425A
 		return bzip2.NewReader(file), nil, nil
 

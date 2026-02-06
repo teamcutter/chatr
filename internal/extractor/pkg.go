@@ -71,7 +71,7 @@ func (pe *PKGExtractor) extractCPIO(payloadPath, dst string) error {
 	if _, err := file.Read(header); err != nil {
 		return err
 	}
-	file.Seek(0, 0)
+	file.Seek(0, io.SeekStart)
 
 	if header[0] == 0x1f && header[1] == 0x8b {
 		gzr, err := gzip.NewReader(file)
