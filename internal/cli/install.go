@@ -19,7 +19,7 @@ func newInstallCmd() *cobra.Command {
 		Short: "Install packages",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mgr, cfg, reg, err := newManager()
+			mgr, cfg, _, res, err := newManager()
 			if err != nil {
 				return err
 			}
@@ -36,8 +36,8 @@ func newInstallCmd() *cobra.Command {
 			for _, name := range args {
 				g.Go(func() error {
 
-					stop := withSpinner(cmd.Context(), fmt.Sprintf("Fetching %s...", name))
-					formula, err := reg.Get(ctx, name)
+					stop := withSpinner(ctx, fmt.Sprintf("Resolving %s...", name))
+					resolved, err := res.Resolve(ctx, name)
 					stop()
 					if err != nil {
 						mu.Lock()
@@ -46,42 +46,66 @@ func newInstallCmd() *cobra.Command {
 						return nil
 					}
 
-					installVersion := formula.Version
-					installRevision := formula.Revision
-					if version != "latest" {
-						installVersion = version
-						installRevision = ""
-					}
+					var depNames []string
+					var rootName string
 
-					checksum := sha256
-					if checksum == "" {
-						checksum = formula.SHA256
-					}
+					for _, rp := range resolved {
+						formula := rp.Formula
 
-					pkg, err := mgr.Install(ctx, domain.Package{
-						Name:        formula.Name,
-						Version:     installVersion,
-						Revision:    installRevision,
-						DownloadURL: formula.URL,
-						SHA256:      checksum,
-					})
-					if err != nil {
+						installVersion := formula.Version
+						installRevision := formula.Revision
+						if !rp.IsDep && version != "latest" {
+							installVersion = version
+							installRevision = ""
+						}
+
+						checksum := formula.SHA256
+						if !rp.IsDep && sha256 != "" {
+							checksum = sha256
+						}
+
+						pkg, err := mgr.Install(ctx, domain.Package{
+							Name:        formula.Name,
+							Version:     installVersion,
+							Revision:    installRevision,
+							DownloadURL: formula.URL,
+							SHA256:      checksum,
+						})
+						if err != nil {
+							mu.Lock()
+							if strings.Contains(err.Error(), "already installed") {
+								success = append(success, fmt.Sprintf("%s %s already installed", yellow("!"), bold(formula.Name)))
+							} else if rp.IsDep {
+								success = append(success, fmt.Sprintf("  %s %s: %v %s",
+									dim("↳"), formula.Name, err, dim("(skipped)")))
+							} else {
+								errs = append(errs, fmt.Errorf("%s: %v", formula.Name, err))
+							}
+							mu.Unlock()
+							if !rp.IsDep {
+								return nil
+							}
+							continue
+						}
+
 						mu.Lock()
-						if strings.Contains(err.Error(), "already installed") {
-							success = append(success, fmt.Sprintf("%s %s already installed", yellow("!"), bold(name)))
+						if rp.IsDep {
+							depNames = append(depNames, formula.Name)
+							success = append(success, fmt.Sprintf("  %s %s%s%s %s",
+								dim("↳"), bold(pkg.Name), bold("-"), bold(pkg.FullVersion()), dim("(dependency)")))
 						} else {
-							errs = append(errs, fmt.Errorf("%s: %v", name, err))
+							rootName = pkg.Name
+							success = append(success, fmt.Sprintf("%s %s%s%s\n  %s %s\n  %s %s",
+								green("✓"), bold(pkg.Name), bold("-"), bold(pkg.FullVersion()),
+								cyan("cache:"), filepath.Join(cfg.CacheDir, pkg.Name, pkg.FullVersion()),
+								cyan("path:"), filepath.Join(cfg.PackagesDir, pkg.Name, pkg.FullVersion())))
 						}
 						mu.Unlock()
-						return nil
 					}
 
-					mu.Lock()
-					success = append(success, fmt.Sprintf("%s %s%s%s\n  %s %s\n  %s %s",
-						green("✓"), bold(pkg.Name), bold("-"), bold(pkg.FullVersion()),
-						cyan("cache:"), filepath.Join(cfg.CacheDir, pkg.Name, pkg.FullVersion()),
-						cyan("path:"), filepath.Join(cfg.PackagesDir, pkg.Name, pkg.FullVersion())))
-					mu.Unlock()
+					if rootName != "" && len(depNames) > 0 {
+						mgr.SetDependencies(rootName, depNames)
+					}
 
 					return nil
 				})

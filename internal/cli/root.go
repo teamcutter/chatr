@@ -11,6 +11,7 @@ import (
 	"github.com/teamcutter/chatr/internal/fetcher"
 	"github.com/teamcutter/chatr/internal/manager"
 	"github.com/teamcutter/chatr/internal/registry"
+	"github.com/teamcutter/chatr/internal/resolver"
 	"github.com/teamcutter/chatr/internal/state"
 )
 
@@ -29,24 +30,28 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
-func newManager() (*manager.Manager, *config.Config, domain.Registry, error) {
+func newManager() (*manager.Manager, *config.Config, domain.Registry, *resolver.Resolver, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	c, err := cache.New(cfg.CacheDir)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	reg := registry.New(cfg.CacheDir)
+	st := state.New(cfg.ManifestFile)
 
-	return manager.New(
+	mgr := manager.New(
 		fetcher.New(cfg.CacheDir, 1*time.Hour),
 		c,
 		extractor.New(),
-		state.New(cfg.ManifestFile),
+		st,
 		cfg.PackagesDir,
-		cfg.BinDir), cfg, reg, err
+		cfg.BinDir,
+		cfg.LibDir)
+
+	return mgr, cfg, reg, resolver.New(reg, st), nil
 }

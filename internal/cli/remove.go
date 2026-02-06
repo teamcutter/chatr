@@ -22,7 +22,7 @@ func newRemoveCmd() *cobra.Command {
 			return cobra.MinimumNArgs(1)(cmd, args)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mgr, _, _, _ := newManager()
+			mgr, _, _, _, _ := newManager()
 
 			packages := args
 			if all {
@@ -53,7 +53,7 @@ func newRemoveCmd() *cobra.Command {
 					failed++
 					continue
 				}
-				fmt.Printf("%s %s%s%s removed\n", green("✓"), bold(removedPackage.Name), bold("-"), bold(removedPackage.FullVersion()))
+				fmt.Printf("%s %s%s%s removed (with %s dependencies)\n", green("✓"), bold(removedPackage.Name), bold("-"), bold(removedPackage.FullVersion()), green(len(removedPackage.Dependencies)))
 			}
 
 			if failed > 0 {

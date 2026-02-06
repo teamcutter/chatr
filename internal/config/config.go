@@ -16,6 +16,7 @@ type Config struct {
 	ChatrDir        string                  `toml:"chatr_dir"`
 	PackagesDir     string                  `toml:"packages_dir"`
 	BinDir          string                  `toml:"bin_dir"`
+	LibDir          string                  `toml:"lib_dir"`
 	ManifestFile    string                  `toml:"manifest_file"`
 	MaxParallel     int                     `toml:"max_parallel"`
 	Registries      []domain.RegistryConfig `toml:"registries"`
@@ -31,6 +32,7 @@ func DefaultConfig() *Config {
 		ChatrDir:     base,
 		PackagesDir:  filepath.Join(base, "packages"),
 		BinDir:       filepath.Join(base, "bin"),
+		LibDir:       filepath.Join(base, "lib"),
 		ManifestFile: filepath.Join(base, "installed.json"),
 		MaxParallel:  8,
 		Registries: []domain.RegistryConfig{

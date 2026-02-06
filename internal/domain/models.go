@@ -22,13 +22,14 @@ type FetchResult struct {
 }
 
 type InstalledPackage struct {
-	Name        string    `json:"name"`
-	Version     string    `json:"version"`
-	Revision    string    `json:"revision,omitempty"`
-	URL         string    `json:"url"`
-	Path        string    `json:"path"`
-	Binaries    []string  `json:"binaries"`
-	InstalledAt time.Time `json:"installed_at"`
+	Name         string    `json:"name"`
+	Version      string    `json:"version"`
+	Revision     string    `json:"revision,omitempty"`
+	URL          string    `json:"url"`
+	Path         string    `json:"path"`
+	Binaries     []string  `json:"binaries"`
+	Dependencies []string  `json:"dependencies,omitempty"`
+	InstalledAt  time.Time `json:"installed_at"`
 }
 
 func (p InstalledPackage) FullVersion() string {

@@ -70,6 +70,14 @@ func (te *TARExtractor) Extract(src, dst string) error {
 				return err
 			}
 			outFile.Close()
+		case tar.TypeSymlink:
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return err
+			}
+			os.Remove(target)
+			if err := os.Symlink(header.Linkname, target); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

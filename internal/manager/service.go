@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -19,6 +20,7 @@ type Manager struct {
 	state       domain.State
 	packagesDir string
 	binDir      string
+	libDir      string
 }
 
 func New(
@@ -26,7 +28,7 @@ func New(
 	cache domain.Cache,
 	extractor domain.Extractor,
 	state domain.State,
-	packagesDir, binDir string,
+	packagesDir, binDir, libDir string,
 ) *Manager {
 
 	return &Manager{
@@ -36,6 +38,7 @@ func New(
 		state:       state,
 		packagesDir: packagesDir,
 		binDir:      binDir,
+		libDir:      libDir,
 	}
 }
 
@@ -65,11 +68,16 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		return nil, err
 	}
 
-	binaries, err := findBinaries(pkgPath)
-	if err != nil {
-		os.RemoveAll(pkgPath)
-		return nil, err
+	libs := findLibraries(pkgPath)
+	for _, libPath := range libs {
+		libName := filepath.Base(libPath)
+		m.createLibSymlink(libPath, libName)
+		if runtime.GOOS == "darwin" {
+			rewriteDylibs(libPath, m.libDir)
+		}
 	}
+
+	binaries := findBinaries(pkgPath)
 
 	var binaryNames []string
 	for _, binPath := range binaries {
@@ -78,6 +86,10 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 			return nil, err
 		}
 		binaryNames = append(binaryNames, binName)
+
+		if runtime.GOOS == "darwin" {
+			rewriteDylibs(binPath, m.libDir)
+		}
 	}
 
 	installedPkg := &domain.InstalledPackage{
@@ -90,8 +102,7 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		InstalledAt: time.Now(),
 	}
 
-	err = m.state.Add(installedPkg)
-	if err != nil {
+	if err := m.state.Add(installedPkg); err != nil {
 		return nil, err
 	}
 
@@ -111,17 +122,56 @@ func (m *Manager) Remove(ctx context.Context, pkg domain.Package) (*domain.Insta
 		}
 	}
 
+	libs := findLibraries(installedPkg.Path)
+	for _, libPath := range libs {
+		linkPath := filepath.Join(m.libDir, filepath.Base(libPath))
+		os.Remove(linkPath)
+	}
+
 	packageDir := filepath.Join(m.packagesDir, pkg.Name)
 	if err := os.RemoveAll(packageDir); err != nil {
 		return nil, err
 	}
 
-	err := m.state.Remove(pkg.Name)
-	if err != nil {
+	if err := m.state.Remove(pkg.Name); err != nil {
 		return nil, err
 	}
 
+	for _, dep := range installedPkg.Dependencies {
+		if m.isDependencyOf(dep, pkg.Name) {
+			continue
+		}
+		m.Remove(ctx, domain.Package{Name: dep})
+	}
+
 	return installedPkg, nil
+}
+
+func (m *Manager) isDependencyOf(dep, excludeName string) bool {
+	installed, err := m.state.ListInstalled()
+	if err != nil {
+		return false
+	}
+	for name, pkg := range installed {
+		if name == excludeName {
+			continue
+		}
+		for _, d := range pkg.Dependencies {
+			if d == dep {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (m *Manager) SetDependencies(name string, deps []string) error {
+	_, pkg, err := m.state.IsInstalled(name)
+	if err != nil || pkg == nil {
+		return err
+	}
+	pkg.Dependencies = deps
+	return m.state.Add(pkg)
 }
 
 func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPackage domain.Package) (*domain.InstalledPackage, error) {
@@ -175,7 +225,67 @@ func (m *Manager) createSymlink(path, binName string) error {
 	return os.Symlink(path, linkPath)
 }
 
-func findBinaries(dir string) ([]string, error) {
+func (m *Manager) createLibSymlink(src, libName string) {
+	os.MkdirAll(m.libDir, 0755)
+
+	linkPath := filepath.Join(m.libDir, libName)
+	if _, err := os.Lstat(linkPath); err == nil {
+		os.Remove(linkPath)
+	}
+
+	os.Symlink(src, linkPath)
+}
+
+func rewriteDylibs(path, libDir string) {
+	out, err := exec.Command("otool", "-L", path).Output()
+	if err != nil {
+		return
+	}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.Contains(line, " (compatibility") {
+			continue
+		}
+		libRef := strings.TrimSpace(strings.Split(line, " (compatibility")[0])
+
+		if strings.HasPrefix(libRef, "/usr/lib/") ||
+			strings.HasPrefix(libRef, "/System/") ||
+			strings.HasPrefix(libRef, "@rpath/") ||
+			strings.HasPrefix(libRef, "@loader_path/") ||
+			strings.HasPrefix(libRef, "@executable_path/") {
+			continue
+		}
+
+		newRef := "@rpath/" + filepath.Base(libRef)
+		exec.Command("install_name_tool", "-change", libRef, newRef, path).Run()
+	}
+
+	exec.Command("install_name_tool", "-add_rpath", libDir, path).Run()
+	exec.Command("codesign", "--force", "--sign", "-", path).Run()
+}
+
+func findLibraries(dir string) []string {
+	libDir := filepath.Join(dir, "lib")
+	entries, err := os.ReadDir(libDir)
+	if err != nil {
+		return nil
+	}
+
+	var libs []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasSuffix(name, ".dylib") || strings.HasSuffix(name, ".so") || strings.Contains(name, ".so.") {
+			libs = append(libs, filepath.Join(libDir, name))
+		}
+	}
+	return libs
+}
+
+func findBinaries(dir string) []string {
 	candidates := []string{
 		filepath.Join(dir, "bin"),
 		filepath.Join(dir, "libexec", "bin"),
@@ -184,11 +294,11 @@ func findBinaries(dir string) ([]string, error) {
 
 	for _, binPath := range candidates {
 		if executables := findExecutablesIn(binPath); len(executables) > 0 {
-			return executables, nil
+			return executables
 		}
 	}
 
-	return nil, fmt.Errorf("no executables found in %s", dir)
+	return nil
 }
 
 func findExecutablesIn(binPath string) []string {

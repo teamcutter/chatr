@@ -15,7 +15,7 @@ func newUpgradeCmd() *cobra.Command {
 		Use:   "upgrade [name...]",
 		Short: "Upgrade installed packages to latest version",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mgr, cfg, reg, err := newManager()
+			mgr, cfg, _, res, err := newManager()
 			if err != nil {
 				return err
 			}
@@ -55,8 +55,8 @@ func newUpgradeCmd() *cobra.Command {
 						return nil
 					}
 
-					stop := withSpinner(ctx, fmt.Sprintf("Checking %s...", name))
-					formula, err := reg.Get(ctx, name)
+					stop := withSpinner(ctx, fmt.Sprintf("Resolving %s...", name))
+					resolved, err := res.Resolve(ctx, name)
 					stop()
 					if err != nil {
 						mu.Lock()
@@ -65,7 +65,43 @@ func newUpgradeCmd() *cobra.Command {
 						return nil
 					}
 
-					if installedPkg.FullVersion() == formula.FullVersion() {
+					var depNames []string
+
+					for _, rp := range resolved {
+						if !rp.IsDep {
+							continue
+						}
+						formula := rp.Formula
+						pkg, err := mgr.Install(ctx, domain.Package{
+							Name:        formula.Name,
+							Version:     formula.Version,
+							Revision:    formula.Revision,
+							DownloadURL: formula.URL,
+							SHA256:      formula.SHA256,
+						})
+						if err != nil {
+							mu.Lock()
+							upgraded = append(upgraded, fmt.Sprintf("  %s %s: %v %s",
+								dim("↳"), formula.Name, err, dim("(skipped)")))
+							mu.Unlock()
+							continue
+						}
+						depNames = append(depNames, formula.Name)
+						mu.Lock()
+						upgraded = append(upgraded, fmt.Sprintf("  %s %s%s%s %s",
+							dim("↳"), bold(pkg.Name), bold("-"), bold(pkg.FullVersion()), dim("(dependency)")))
+						mu.Unlock()
+					}
+
+					var rootFormula *domain.Formula
+					for _, rp := range resolved {
+						if !rp.IsDep {
+							rootFormula = &rp.Formula
+							break
+						}
+					}
+
+					if rootFormula == nil || installedPkg.FullVersion() == rootFormula.FullVersion() {
 						mu.Lock()
 						upToDate = append(upToDate, name)
 						mu.Unlock()
@@ -78,17 +114,21 @@ func newUpgradeCmd() *cobra.Command {
 						Name:    name,
 						Version: installedPkg.Version,
 					}, domain.Package{
-						Name:        formula.Name,
-						Version:     formula.Version,
-						Revision:    formula.Revision,
-						DownloadURL: formula.URL,
-						SHA256:      formula.SHA256,
+						Name:        rootFormula.Name,
+						Version:     rootFormula.Version,
+						Revision:    rootFormula.Revision,
+						DownloadURL: rootFormula.URL,
+						SHA256:      rootFormula.SHA256,
 					})
 					if err != nil {
 						mu.Lock()
 						errs = append(errs, fmt.Errorf("%s: %v", name, err))
 						mu.Unlock()
 						return nil
+					}
+
+					if len(depNames) > 0 {
+						mgr.SetDependencies(pkg.Name, depNames)
 					}
 
 					mu.Lock()

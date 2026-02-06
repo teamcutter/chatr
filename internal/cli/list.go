@@ -11,7 +11,7 @@ func newListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List installed packages",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mgr, _, _, _ := newManager()
+			mgr, _, _, _, _ := newManager()
 
 			packages, err := mgr.List()
 			if err != nil {

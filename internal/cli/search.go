@@ -14,7 +14,7 @@ func newSearchCmd() *cobra.Command {
 		Short: "Search for packages",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, _, reg, err := newManager()
+			_, _, reg, _, err := newManager()
 			if err != nil {
 				return err
 			}
