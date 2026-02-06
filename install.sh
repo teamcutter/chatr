@@ -47,6 +47,9 @@ else
     tar -xzf "$TMP_DIR/$FILENAME" -C "$TMP_DIR"
 fi
 
+if [ "$OS" = "linux" ]; then
+    rm -f "$INSTALL_DIR/chatr"
+fi
 cp "$TMP_DIR/chatr" "$INSTALL_DIR/chatr"
 chmod +x "$INSTALL_DIR/chatr"
 
