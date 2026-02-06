@@ -44,7 +44,7 @@ func newRemoveCmd() *cobra.Command {
 			fmt.Println()
 			var failed int
 			for _, arg := range packages {
-				rmName, rmVersion, err := mgr.Remove(cmd.Context(), domain.Package{
+				removedPackage, err := mgr.Remove(cmd.Context(), domain.Package{
 					Name:    arg,
 					Version: version,
 				})
@@ -53,7 +53,7 @@ func newRemoveCmd() *cobra.Command {
 					failed++
 					continue
 				}
-				fmt.Printf("%s %s%s%s removed\n", green("✓"), bold(rmName), bold("@"), bold(rmVersion))
+				fmt.Printf("%s %s%s%s removed\n", green("✓"), bold(removedPackage.Name), bold("@"), bold(removedPackage.FullVersion()))
 			}
 
 			if failed > 0 {

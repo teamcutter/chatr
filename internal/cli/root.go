@@ -24,6 +24,7 @@ func Execute() error {
 		newClearCmd(),
 		newVersionCmd(),
 		newNewCommand(),
+		newUpgradeCmd(),
 	)
 	return rootCmd.Execute()
 }

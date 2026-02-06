@@ -26,10 +26,11 @@ type State interface {
 	IsInstalled(name string) (bool, *InstalledPackage, error)
 	Add(pkg *InstalledPackage) error
 	Remove(name string) error
+	ListInstalled() (map[string]*InstalledPackage, error)
 }
 
 type Registry interface {
 	Get(ctx context.Context, name string) (*Formula, error)
 	Search(ctx context.Context, query string) ([]Formula, error)
-	GetVersions(ctx context.Context, name string) ([]string, error)
+	GetVersion(ctx context.Context, name string) (string, error)
 }

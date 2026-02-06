@@ -96,6 +96,14 @@ func (m *ManifestState) Add(pkg *domain.InstalledPackage) error {
 	return m.save(manifest)
 }
 
+func (m *ManifestState) ListInstalled() (map[string]*domain.InstalledPackage, error) {
+	manifest, err := m.Load()
+	if err != nil {
+		return nil, err
+	}
+	return manifest.Packages, nil
+}
+
 func (m *ManifestState) Remove(name string) error {
 	m.Lock()
 	defer m.Unlock()

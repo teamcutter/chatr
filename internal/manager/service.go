@@ -98,30 +98,48 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 	return installedPkg, nil
 }
 
-func (m *Manager) Remove(ctx context.Context, pkg domain.Package) (string, string, error) {
+func (m *Manager) Remove(ctx context.Context, pkg domain.Package) (*domain.InstalledPackage, error) {
 	installed, installedPkg, _ := m.state.IsInstalled(pkg.Name)
 	if !installed {
-		return "", "", fmt.Errorf("package %s is not installed", pkg.Name)
+		return nil, fmt.Errorf("package %s is not installed", pkg.Name)
 	}
 
 	for _, binName := range installedPkg.Binaries {
 		binaryPath := filepath.Join(m.binDir, binName)
 		if err := os.Remove(binaryPath); err != nil && !os.IsNotExist(err) {
-			return "", "", err
+			return nil, err
 		}
 	}
 
 	packageDir := filepath.Join(m.packagesDir, pkg.Name)
 	if err := os.RemoveAll(packageDir); err != nil {
-		return "", "", err
+		return nil, err
 	}
 
 	err := m.state.Remove(pkg.Name)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 
-	return installedPkg.Name, installedPkg.FullVersion(), nil
+	return installedPkg, nil
+}
+
+func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPackage domain.Package) (*domain.InstalledPackage, error) {
+	_, err := m.Remove(ctx, oldPackage)
+	if err != nil {
+		return nil, err
+	}
+
+	installedPackage, err := m.Install(ctx, newPackage)
+	if err != nil {
+		return nil, err
+	}
+
+	return installedPackage, nil
+}
+
+func (m *Manager) ListInstalled() (map[string]*domain.InstalledPackage, error) {
+	return m.state.ListInstalled()
 }
 
 func (m *Manager) Clear(ctx context.Context) error {
