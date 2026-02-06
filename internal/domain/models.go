@@ -8,6 +8,7 @@ type Package struct {
 	Revision    string
 	DownloadURL string
 	SHA256      string
+	IsDep       bool
 }
 
 func (p Package) FullVersion() string {
@@ -29,6 +30,7 @@ type InstalledPackage struct {
 	Path         string    `json:"path"`
 	Binaries     []string  `json:"binaries"`
 	Dependencies []string  `json:"dependencies,omitempty"`
+	IsDep        bool      `json:"is_dep,omitempty"`
 	InstalledAt  time.Time `json:"installed_at"`
 }
 

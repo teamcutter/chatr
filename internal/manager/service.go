@@ -72,9 +72,7 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 	for _, libPath := range libs {
 		libName := filepath.Base(libPath)
 		m.createLibSymlink(libPath, libName)
-		if runtime.GOOS == "darwin" {
-			rewriteDylibs(libPath, m.libDir)
-		}
+		patchRpath(libPath, m.libDir)
 	}
 
 	binaries := findBinaries(pkgPath)
@@ -86,10 +84,7 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 			return nil, err
 		}
 		binaryNames = append(binaryNames, binName)
-
-		if runtime.GOOS == "darwin" {
-			rewriteDylibs(binPath, m.libDir)
-		}
+		patchRpath(binPath, m.libDir)
 	}
 
 	installedPkg := &domain.InstalledPackage{
@@ -99,6 +94,7 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		URL:         pkg.DownloadURL,
 		Path:        pkgPath,
 		Binaries:    binaryNames,
+		IsDep:       pkg.IsDep,
 		InstalledAt: time.Now(),
 	}
 
@@ -204,6 +200,9 @@ func (m *Manager) List() ([]string, error) {
 
 	packages := make([]string, 0, len(manifest.Packages))
 	for _, pkg := range manifest.Packages {
+		if pkg.IsDep {
+			continue
+		}
 		packageItem := fmt.Sprintf("%s-%s", pkg.Name, pkg.FullVersion())
 		packages = append(packages, packageItem)
 	}
@@ -236,7 +235,16 @@ func (m *Manager) createLibSymlink(src, libName string) {
 	os.Symlink(src, linkPath)
 }
 
-func rewriteDylibs(path, libDir string) {
+func patchRpath(path, libDir string) {
+	switch runtime.GOOS {
+	case "darwin":
+		patchDarwin(path, libDir)
+	case "linux":
+		exec.Command("patchelf", "--set-rpath", libDir, path).Run()
+	}
+}
+
+func patchDarwin(path, libDir string) {
 	out, err := exec.Command("otool", "-L", path).Output()
 	if err != nil {
 		return

@@ -70,6 +70,7 @@ func newInstallCmd() *cobra.Command {
 							Revision:    installRevision,
 							DownloadURL: formula.URL,
 							SHA256:      checksum,
+							IsDep:       rp.IsDep,
 						})
 						if err != nil {
 							mu.Lock()

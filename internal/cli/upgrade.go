@@ -78,6 +78,7 @@ func newUpgradeCmd() *cobra.Command {
 							Revision:    formula.Revision,
 							DownloadURL: formula.URL,
 							SHA256:      formula.SHA256,
+							IsDep:       true,
 						})
 						if err != nil {
 							mu.Lock()
