@@ -70,7 +70,7 @@ chatr remove [name...]
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--version` | `-v` | `latest` | Package version to remove |
-| `--all`| | false | Remove all installed packages |
+| `--all`| | `false` | Remove all installed packages |
 ### list
 
 List all installed packages.
@@ -90,6 +90,14 @@ chatr search <query>
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--show` | `-s` | `50` | Number of results to display |
+
+### upgrade
+
+Upgrade installed packages to the latest version. If no names are given, upgrades all installed packages.
+
+```bash
+chatr upgrade [name...]
+```
 
 ### clear
 
