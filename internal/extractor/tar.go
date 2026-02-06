@@ -27,7 +27,7 @@ func (te *TARExtractor) Extract(src, dst string) error {
 	}
 	defer file.Close()
 
-	reader, cleanup, err := te.getDecompressor(src, file)
+	reader, cleanup, err := te.getDecompressor(file)
 	if err != nil {
 		return err
 	}
@@ -75,38 +75,46 @@ func (te *TARExtractor) Extract(src, dst string) error {
 	return nil
 }
 
-func (te *TARExtractor) getDecompressor(src string, file *os.File) (io.Reader, func(), error) {
-	lower := strings.ToLower(src)
+// https://gist.github.com/leommoore/f9e57ba2aa4bf197ebc5 - this is AWESOME
+func (te *TARExtractor) getDecompressor(file *os.File) (io.Reader, func(), error) {
+	magic := make([]byte, 6)
+	n, _ := file.Read(magic)
+	magic = magic[:n]
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, nil, err
+	}
 
 	switch {
-	case strings.HasSuffix(lower, ".tar.zst"), strings.HasSuffix(lower, ".tzst"):
+	case n >= 4 && magic[0] == 0x28 && magic[1] == 0xb5 && magic[2] == 0x2f && magic[3] == 0xfd:
+		// zstd: 0x28B52FFD
 		zr, err := zstd.NewReader(file)
 		if err != nil {
 			return nil, nil, fmt.Errorf("zstd: %w", err)
 		}
 		return zr, func() { zr.Close() }, nil
 
-	case strings.HasSuffix(lower, ".tar.gz"), strings.HasSuffix(lower, ".tgz"):
+	case n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b:
+		// gzip: 0x1F8B
 		gzr, err := gzip.NewReader(file)
 		if err != nil {
 			return nil, nil, fmt.Errorf("gzip: %w", err)
 		}
 		return gzr, func() { gzr.Close() }, nil
 
-	case strings.HasSuffix(lower, ".tar.xz"), strings.HasSuffix(lower, ".txz"):
+	case n >= 6 && magic[0] == 0xfd && magic[1] == 0x37 && magic[2] == 0x7a && magic[3] == 0x58 && magic[4] == 0x5a && magic[5] == 0x00:
+		// xz: 0xFD377A585A00
 		xzr, err := xz.NewReader(file)
 		if err != nil {
 			return nil, nil, fmt.Errorf("xz: %w", err)
 		}
 		return xzr, nil, nil
 
-	case strings.HasSuffix(lower, ".tar.bz2"), strings.HasSuffix(lower, ".tbz2"):
+	case n >= 2 && magic[0] == 0x42 && magic[1] == 0x5a:
+		// bzip2: 0x425A
 		return bzip2.NewReader(file), nil, nil
 
-	case strings.HasSuffix(lower, ".tar"):
-		return file, nil, nil
-
 	default:
-		return nil, nil, fmt.Errorf("unsupported archive format: %s", src)
+		// plain tar
+		return file, nil, nil
 	}
 }
