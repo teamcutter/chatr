@@ -233,19 +233,20 @@ func (h *HomebrewRegistry) toFormula(f *Formulae) *domain.Formula {
 }
 
 func getPlatformCandidates() []string {
+	var candidates []string
 	switch runtime.GOOS {
 	case "darwin":
 		if runtime.GOARCH == "arm64" {
-			return []string{"arm64_sequoia", "arm64_sonoma", "arm64_ventura", "arm64_monterey"}
+			candidates = []string{"arm64_sequoia", "arm64_sonoma", "arm64_ventura", "arm64_monterey"}
+		} else {
+			candidates = []string{"sequoia", "sonoma", "ventura", "monterey"}
 		}
-		return []string{"sequoia", "sonoma", "ventura", "monterey"}
 	case "linux":
 		if runtime.GOARCH == "amd64" {
-			return []string{"x86_64_linux"}
-		}
-		if runtime.GOARCH == "arm64" {
-			return []string{"aarch64_linux"}
+			candidates = []string{"x86_64_linux"}
+		} else if runtime.GOARCH == "arm64" {
+			candidates = []string{"aarch64_linux"}
 		}
 	}
-	return []string{}
+	return append(candidates, "all")
 }
