@@ -13,8 +13,9 @@ type Resolver struct {
 }
 
 type ResolvedPackage struct {
-	Formula domain.Formula
-	IsDep   bool
+	Formula          domain.Formula
+	IsDep            bool
+	AlreadyInstalled bool
 }
 
 func New(registry domain.Registry, state domain.State) *Resolver {
@@ -46,10 +47,10 @@ func (r *Resolver) resolve(ctx context.Context, name string, isDep bool, visitin
 		return fmt.Errorf("dependency cycle detected: %s", name)
 	}
 
+	alreadyInstalled := false
 	if isDep {
 		if installed, _, _ := r.state.IsInstalled(name); installed {
-			visited[name] = true
-			return nil
+			alreadyInstalled = true
 		}
 	}
 
@@ -70,8 +71,9 @@ func (r *Resolver) resolve(ctx context.Context, name string, isDep bool, visitin
 	visited[name] = true
 
 	*result = append(*result, ResolvedPackage{
-		Formula: *formula,
-		IsDep:   isDep,
+		Formula:          *formula,
+		IsDep:            isDep,
+		AlreadyInstalled: alreadyInstalled,
 	})
 
 	return nil

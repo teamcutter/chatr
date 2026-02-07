@@ -76,7 +76,6 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 	}
 
 	binaries := findBinaries(pkgPath)
-
 	var binaryNames []string
 	for _, binPath := range binaries {
 		binName := filepath.Base(binPath)

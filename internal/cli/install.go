@@ -52,6 +52,15 @@ func newInstallCmd() *cobra.Command {
 					for _, rp := range resolved {
 						formula := rp.Formula
 
+						if rp.AlreadyInstalled {
+							depNames = append(depNames, formula.Name)
+							mu.Lock()
+							success = append(success, fmt.Sprintf("  %s %s %s",
+								dim("↳"), formula.Name, dim("(already installed)")))
+							mu.Unlock()
+							continue
+						}
+
 						installVersion := formula.Version
 						installRevision := formula.Revision
 						if !rp.IsDep && version != "latest" {
