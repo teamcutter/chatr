@@ -37,8 +37,7 @@ func (r *Resolver) Resolve(ctx context.Context, name string) ([]ResolvedPackage,
 	return result, nil
 }
 
-func (r *Resolver) resolve(ctx context.Context, name string, isDep bool, visiting, visited map[string]bool, result *[]ResolvedPackage,
-) error {
+func (r *Resolver) resolve(ctx context.Context, name string, isDep bool, visiting, visited map[string]bool, result *[]ResolvedPackage) error {
 	if visited[name] {
 		return nil
 	}

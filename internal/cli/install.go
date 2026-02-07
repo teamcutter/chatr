@@ -13,14 +13,15 @@ import (
 )
 
 func newInstallCmd() *cobra.Command {
-	var version, sha256 string
+	var sha256 string
+	var cask bool
 
 	cmd := &cobra.Command{
 		Use:   "install <name>...",
 		Short: "Install packages",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mgr, cfg, _, res, err := newManager()
+			mgr, cfg, _, res, err := newManagerWithOptions(cask)
 			if err != nil {
 				return err
 			}
@@ -92,13 +93,6 @@ func newInstallCmd() *cobra.Command {
 						return nil
 					}
 
-					installVersion := formula.Version
-					installRevision := formula.Revision
-					if !rp.IsDep && version != "latest" {
-						installVersion = version
-						installRevision = ""
-					}
-
 					checksum := formula.SHA256
 					if !rp.IsDep && sha256 != "" {
 						checksum = sha256
@@ -106,11 +100,12 @@ func newInstallCmd() *cobra.Command {
 
 					pkg, err := mgr.Install(ictx, domain.Package{
 						Name:        formula.Name,
-						Version:     installVersion,
-						Revision:    installRevision,
+						Version:     formula.Version,
+						Revision:    formula.Revision,
 						DownloadURL: formula.URL,
 						SHA256:      checksum,
 						IsDep:       rp.IsDep,
+						IsCask:      formula.IsCask,
 					})
 					if err != nil {
 						outMu.Lock()
@@ -132,6 +127,13 @@ func newInstallCmd() *cobra.Command {
 					if rp.IsDep {
 						output[formula.Name] = fmt.Sprintf("  %s %s%s%s %s",
 							dim("↳"), bold(pkg.Name), bold("-"), bold(pkg.FullVersion()), dim("(dependency)"))
+					} else if pkg.IsCask {
+						lines := fmt.Sprintf("%s %s%s%s %s",
+							green("✓"), bold(pkg.Name), bold("-"), bold(pkg.FullVersion()), dim("(cask)"))
+						for _, app := range pkg.Apps {
+							lines += fmt.Sprintf("\n  %s %s", cyan("app:"), filepath.Join(cfg.AppsDir, app))
+						}
+						output[formula.Name] = lines
 					} else {
 						output[formula.Name] = fmt.Sprintf("%s %s%s%s\n  %s %s\n  %s %s",
 							green("✓"), bold(pkg.Name), bold("-"), bold(pkg.FullVersion()),
@@ -168,7 +170,7 @@ func newInstallCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&version, "version", "v", "latest", "Package version")
 	cmd.Flags().StringVar(&sha256, "sha256", "", "Expected SHA256 checksum")
+	cmd.Flags().BoolVar(&cask, "cask", false, "Install a cask (macOS application)")
 	return cmd
 }

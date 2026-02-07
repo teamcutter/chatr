@@ -40,6 +40,22 @@ func (ze *ZIPExtractor) Extract(src, dst string) error {
 			return err
 		}
 
+		if f.FileInfo().Mode()&os.ModeSymlink != 0 {
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			linkTarget, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return err
+			}
+			if err := os.Symlink(string(linkTarget), target); err != nil {
+				return err
+			}
+			continue
+		}
+
 		rc, err := f.Open()
 		if err != nil {
 			return err

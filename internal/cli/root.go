@@ -31,6 +31,10 @@ func Execute() error {
 }
 
 func newManager() (*manager.Manager, *config.Config, domain.Registry, *resolver.Resolver, error) {
+	return newManagerWithOptions(false)
+}
+
+func newManagerWithOptions(cask bool) (*manager.Manager, *config.Config, domain.Registry, *resolver.Resolver, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -41,7 +45,13 @@ func newManager() (*manager.Manager, *config.Config, domain.Registry, *resolver.
 		return nil, nil, nil, nil, err
 	}
 
-	reg := registry.New(cfg.CacheDir)
+	var reg domain.Registry
+	if cask {
+		reg = registry.NewCask(cfg.CacheDir)
+	} else {
+		reg = registry.New(cfg.CacheDir)
+	}
+
 	st := state.New(cfg.ManifestFile)
 
 	mgr := manager.New(
@@ -51,7 +61,8 @@ func newManager() (*manager.Manager, *config.Config, domain.Registry, *resolver.
 		st,
 		cfg.PackagesDir,
 		cfg.BinDir,
-		cfg.LibDir)
+		cfg.LibDir,
+		cfg.AppsDir)
 
 	return mgr, cfg, reg, resolver.New(reg, st), nil
 }

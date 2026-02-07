@@ -17,6 +17,7 @@ type Config struct {
 	PackagesDir     string                  `toml:"packages_dir"`
 	BinDir          string                  `toml:"bin_dir"`
 	LibDir          string                  `toml:"lib_dir"`
+	AppsDir         string                  `toml:"apps_dir"`
 	ManifestFile    string                  `toml:"manifest_file"`
 	MaxParallel     int                     `toml:"max_parallel"`
 	Registries      []domain.RegistryConfig `toml:"registries"`
@@ -33,10 +34,12 @@ func DefaultConfig() *Config {
 		PackagesDir:  filepath.Join(base, "packages"),
 		BinDir:       filepath.Join(base, "bin"),
 		LibDir:       filepath.Join(base, "lib"),
+		AppsDir:      "/Applications",
 		ManifestFile: filepath.Join(base, "installed.json"),
-		MaxParallel:  8,
+		MaxParallel:  6,
 		Registries: []domain.RegistryConfig{
-			{Name: "homebrew", URL: "https://formulae.brew.sh/api/"},
+			{Name: "homebrew", URL: "https://formulae.brew.sh/api/formula.json"},
+			{Name: "homebrew-cask", URL: "https://formulae.brew.sh/api/cask.json"},
 		},
 		DefaultRegistry: "homebrew",
 	}

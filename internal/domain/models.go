@@ -9,6 +9,7 @@ type Package struct {
 	DownloadURL string
 	SHA256      string
 	IsDep       bool
+	IsCask      bool
 }
 
 func (p Package) FullVersion() string {
@@ -29,8 +30,10 @@ type InstalledPackage struct {
 	URL          string    `json:"url"`
 	Path         string    `json:"path"`
 	Binaries     []string  `json:"binaries"`
+	Apps         []string  `json:"apps,omitempty"`
 	Dependencies []string  `json:"dependencies,omitempty"`
 	IsDep        bool      `json:"is_dep,omitempty"`
+	IsCask       bool      `json:"is_cask,omitempty"`
 	InstalledAt  time.Time `json:"installed_at"`
 }
 
@@ -60,6 +63,8 @@ type Formula struct {
 	URL          string
 	SHA256       string
 	Dependencies []string
+	IsCask       bool
+	Apps         []string
 }
 
 func (f Formula) FullVersion() string {

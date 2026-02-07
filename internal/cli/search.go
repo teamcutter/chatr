@@ -8,18 +8,19 @@ import (
 
 func newSearchCmd() *cobra.Command {
 	var show int
+	var cask bool
 
 	cmd := &cobra.Command{
 		Use:   "search <query>",
 		Short: "Search for packages",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, _, reg, _, err := newManager()
+			_, _, reg, _, err := newManagerWithOptions(cask)
 			if err != nil {
 				return err
 			}
 
-			stop := withSpinner(cmd.Context(), fmt.Sprintf("Searching %s...", args[0]))
+			stop := withSpinner(cmd.Context(), fmt.Sprintf("Searching for %s...", args[0]))
 			results, err := reg.Search(cmd.Context(), args[0])
 			stop()
 			if err != nil {
@@ -56,5 +57,6 @@ func newSearchCmd() *cobra.Command {
 	}
 
 	cmd.Flags().IntVarP(&show, "show", "s", 5, "Shows first n packages")
+	cmd.Flags().BoolVar(&cask, "cask", false, "Search casks (macOS applications)")
 	return cmd
 }

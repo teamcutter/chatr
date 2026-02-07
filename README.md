@@ -1,6 +1,6 @@
 # Chatr
 
-A package manager CLI for downloading, installing, and managing binary packages.
+A package manager CLI for downloading, installing, and managing binary packages and macOS applications (casks).
 
 ## Installation
 
@@ -44,6 +44,16 @@ Downloading hello 100% |██████████████████�
 Hello, world!
 ```
 
+### Install a cask (macOS application)
+
+```bash
+~/ chatr install --cask firefox
+Downloading firefox 100% |█████████████████████████████████████████████| (85/85 MB, 12 MB/s)
+
+✓ firefox@139.0
+  app: /Users/user/.chatr/apps/Firefox.app
+```
+
 ## Commands
 
 ### install
@@ -56,12 +66,13 @@ chatr install <name>...
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
+| `--cask` | | `false` | Install a macOS application (cask) |
 | `--version` | `-v` | `latest` | Package version |
 | `--sha256` | | | Expected SHA256 checksum |
 
 ### remove
 
-Remove one or more installed packages.
+Remove one or more installed packages. Casks are detected automatically from state — no `--cask` flag needed.
 
 ```bash
 chatr remove [name...]
@@ -73,11 +84,15 @@ chatr remove [name...]
 | `--all`| | `false` | Remove all installed packages |
 ### list
 
-List all installed packages.
+List all installed packages. Shows both formulae and casks.
 
 ```bash
 chatr list
 ```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--cask` | | `false` | List only casks |
 
 ### search
 
@@ -89,15 +104,20 @@ chatr search <query>
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
+| `--cask` | | `false` | Search casks instead of formulae |
 | `--show` | `-s` | `50` | Number of results to display |
 
 ### upgrade
 
-Upgrade installed packages to the latest version. If no names are given, upgrades all installed packages.
+Upgrade installed packages to the latest version. Automatically detects casks from state.
 
 ```bash
 chatr upgrade [name...]
 ```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--all` | | `false` | Upgrade all installed packages |
 
 ### clear
 

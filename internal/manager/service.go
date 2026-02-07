@@ -21,6 +21,7 @@ type Manager struct {
 	packagesDir string
 	binDir      string
 	libDir      string
+	appsDir     string
 }
 
 func New(
@@ -28,7 +29,7 @@ func New(
 	cache domain.Cache,
 	extractor domain.Extractor,
 	state domain.State,
-	packagesDir, binDir, libDir string,
+	packagesDir, binDir, libDir, appsDir string,
 ) *Manager {
 
 	return &Manager{
@@ -39,6 +40,7 @@ func New(
 		packagesDir: packagesDir,
 		binDir:      binDir,
 		libDir:      libDir,
+		appsDir:     appsDir,
 	}
 }
 
@@ -64,26 +66,45 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 	pkgPath := filepath.Join(m.packagesDir, pkg.Name, pkg.FullVersion())
 	os.RemoveAll(pkgPath)
 
-	if err := m.extractor.Extract(archivePath, m.packagesDir); err != nil {
+	extractDest := m.packagesDir
+	if pkg.IsCask {
+		os.MkdirAll(pkgPath, 0755)
+		extractDest = pkgPath
+	}
+
+	if err := m.extractor.Extract(archivePath, extractDest); err != nil {
 		return nil, err
 	}
 
-	libs := findLibraries(pkgPath)
-	for _, libPath := range libs {
-		libName := filepath.Base(libPath)
-		m.createLibSymlink(libPath, libName)
-		patchRpath(libPath, m.libDir)
-	}
-
-	binaries := findBinaries(pkgPath)
 	var binaryNames []string
-	for _, binPath := range binaries {
-		binName := filepath.Base(binPath)
-		if err := m.createSymlink(binPath, binName); err != nil {
-			return nil, err
+	var appNames []string
+
+	if pkg.IsCask {
+		apps := findApps(pkgPath)
+		for _, appPath := range apps {
+			appName := filepath.Base(appPath)
+			if err := m.installApp(appPath, appName); err != nil {
+				return nil, err
+			}
+			appNames = append(appNames, appName)
 		}
-		binaryNames = append(binaryNames, binName)
-		patchRpath(binPath, m.libDir)
+	} else {
+		libs := findLibraries(pkgPath)
+		for _, libPath := range libs {
+			libName := filepath.Base(libPath)
+			m.createLibSymlink(libPath, libName)
+			patchRpath(libPath, m.libDir)
+		}
+
+		binaries := findBinaries(pkgPath)
+		for _, binPath := range binaries {
+			binName := filepath.Base(binPath)
+			if err := m.createSymlink(binPath, binName); err != nil {
+				return nil, err
+			}
+			binaryNames = append(binaryNames, binName)
+			patchRpath(binPath, m.libDir)
+		}
 	}
 
 	installedPkg := &domain.InstalledPackage{
@@ -93,7 +114,9 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		URL:         pkg.DownloadURL,
 		Path:        pkgPath,
 		Binaries:    binaryNames,
+		Apps:        appNames,
 		IsDep:       pkg.IsDep,
+		IsCask:      pkg.IsCask,
 		InstalledAt: time.Now(),
 	}
 
@@ -110,17 +133,24 @@ func (m *Manager) Remove(ctx context.Context, pkg domain.Package) (*domain.Insta
 		return nil, fmt.Errorf("package %s is not installed", pkg.Name)
 	}
 
-	for _, binName := range installedPkg.Binaries {
-		binaryPath := filepath.Join(m.binDir, binName)
-		if err := os.Remove(binaryPath); err != nil && !os.IsNotExist(err) {
-			return nil, err
+	if installedPkg.IsCask {
+		for _, appName := range installedPkg.Apps {
+			appPath := filepath.Join(m.appsDir, appName)
+			os.RemoveAll(appPath)
 		}
-	}
+	} else {
+		for _, binName := range installedPkg.Binaries {
+			binaryPath := filepath.Join(m.binDir, binName)
+			if err := os.Remove(binaryPath); err != nil && !os.IsNotExist(err) {
+				return nil, err
+			}
+		}
 
-	libs := findLibraries(installedPkg.Path)
-	for _, libPath := range libs {
-		linkPath := filepath.Join(m.libDir, filepath.Base(libPath))
-		os.Remove(linkPath)
+		libs := findLibraries(installedPkg.Path)
+		for _, libPath := range libs {
+			linkPath := filepath.Join(m.libDir, filepath.Base(libPath))
+			os.Remove(linkPath)
+		}
 	}
 
 	packageDir := filepath.Join(m.packagesDir, pkg.Name)
@@ -185,6 +215,29 @@ func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPac
 
 func (m *Manager) ListInstalled() (map[string]*domain.InstalledPackage, error) {
 	return m.state.ListInstalled()
+}
+
+func (m *Manager) Reconcile() []string {
+	installed, err := m.state.ListInstalled()
+	if err != nil {
+		return nil
+	}
+
+	var removed []string
+	for name, pkg := range installed {
+		if !pkg.IsCask {
+			continue
+		}
+		for _, app := range pkg.Apps {
+			appPath := filepath.Join(m.appsDir, app)
+			if _, err := os.Stat(appPath); os.IsNotExist(err) {
+				m.state.Remove(name)
+				removed = append(removed, name)
+				break
+			}
+		}
+	}
+	return removed
 }
 
 func (m *Manager) Clear(ctx context.Context) error {
@@ -361,4 +414,30 @@ func findExecutablesIn(binPath string) []string {
 	}
 
 	return executables
+}
+
+func findApps(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+
+	var apps []string
+	for _, e := range entries {
+		if e.IsDir() && strings.HasSuffix(e.Name(), ".app") {
+			apps = append(apps, filepath.Join(dir, e.Name()))
+		}
+	}
+	return apps
+}
+
+func (m *Manager) installApp(appPath, appName string) error {
+	if err := os.MkdirAll(m.appsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create apps directory: %w", err)
+	}
+
+	dest := filepath.Join(m.appsDir, appName)
+	os.RemoveAll(dest)
+
+	return os.Rename(appPath, dest)
 }
