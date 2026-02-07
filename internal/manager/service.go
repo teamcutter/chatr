@@ -240,8 +240,38 @@ func patchRpath(path, libDir string) {
 	case "darwin":
 		patchDarwin(path, libDir)
 	case "linux":
-		exec.Command("patchelf", "--set-rpath", libDir, path).Run()
+		patchLinux(path, libDir)
 	}
+}
+
+func patchLinux(path, libDir string) {
+	interp := findSystemInterpreter()
+	if interp != "" {
+		exec.Command("patchelf", "--set-interpreter", interp, path).Run()
+	}
+	exec.Command("patchelf", "--set-rpath", libDir, path).Run()
+}
+
+func findSystemInterpreter() string {
+	var candidates []string
+	switch runtime.GOARCH {
+	case "amd64":
+		candidates = []string{
+			"/lib64/ld-linux-x86-64.so.2",
+			"/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+		}
+	case "arm64":
+		candidates = []string{
+			"/lib/ld-linux-aarch64.so.1",
+			"/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1",
+		}
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return ""
 }
 
 func patchDarwin(path, libDir string) {
