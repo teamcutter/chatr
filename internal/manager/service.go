@@ -257,22 +257,10 @@ func patchLinux(path, libDir string) {
 }
 
 func findSystemInterpreter() string {
-	var candidates []string
-	switch runtime.GOARCH {
-	case "amd64":
-		candidates = []string{
-			"/lib64/ld-linux-x86-64.so.2",
-			"/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
-		}
-	case "arm64":
-		candidates = []string{
-			"/lib/ld-linux-aarch64.so.1",
-			"/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1",
-		}
-	}
-	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
-			return c
+	out, err := exec.Command("patchelf", "--print-interpreter", "/bin/sh").Output()
+	if err == nil {
+		if interp := strings.TrimSpace(string(out)); interp != "" {
+			return interp
 		}
 	}
 	return ""
