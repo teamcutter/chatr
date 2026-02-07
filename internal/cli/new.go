@@ -3,10 +3,8 @@ package cli
 import (
 	"fmt"
 	"os/exec"
-	"runtime"
 
 	"github.com/spf13/cobra"
-	"github.com/teamcutter/chatr/internal/version"
 )
 
 func newNewCommand() *cobra.Command {
@@ -21,12 +19,10 @@ func newNewCommand() *cobra.Command {
 
 			fmt.Println()
 			if err != nil {
-				fmt.Printf("%s failed to update chatr\n", red("✗"))
-				return err
+				return fmt.Errorf("%s failed to update chatr: %w", red("✗"), err)
 			}
 
-			fmt.Printf("%s chatr updated to version %s%s%s%s%s\n", green("✓"), bold(version.Version), bold("-"),
-				bold(runtime.GOOS), bold("/"), bold(runtime.GOARCH))
+			fmt.Printf("%s chatr updated successfully!\n", green("✓"))
 			return nil
 		},
 	}
