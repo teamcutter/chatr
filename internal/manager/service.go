@@ -245,6 +245,10 @@ func patchRpath(path, libDir string) {
 }
 
 func patchLinux(path, libDir string) {
+	if _, err := exec.LookPath("patchelf"); err != nil {
+		fmt.Fprintln(os.Stderr, "warning: patchelf not found, binaries may not work (install with: apt install patchelf / dnf install patchelf)")
+		return
+	}
 	interp := findSystemInterpreter()
 	if interp != "" {
 		exec.Command("patchelf", "--set-interpreter", interp, path).Run()
