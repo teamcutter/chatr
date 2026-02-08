@@ -25,6 +25,15 @@ if [ -z "$VERSION" ]; then
     exit 1
 fi
 
+if command -v chatr >/dev/null 2>&1; then
+    CURRENT=$(chatr version 2>/dev/null | sed -E 's/chatr-v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+    LATEST="${VERSION#v}"
+    if [ "$CURRENT" = "$LATEST" ]; then
+        echo "chatr $VERSION is already installed"
+        exit 0
+    fi
+fi
+
 EXT="tar.gz"
 if [ "$OS" = "windows" ]; then
     EXT="zip"

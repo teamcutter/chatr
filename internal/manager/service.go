@@ -136,7 +136,9 @@ func (m *Manager) Remove(ctx context.Context, pkg domain.Package) (*domain.Insta
 	if installedPkg.IsCask {
 		for _, appName := range installedPkg.Apps {
 			appPath := filepath.Join(m.appsDir, appName)
-			os.RemoveAll(appPath)
+			if err := os.RemoveAll(appPath); err != nil {
+				return nil, fmt.Errorf("failed to remove app %s: %w", appName, err)
+			}
 		}
 	} else {
 		for _, binName := range installedPkg.Binaries {
