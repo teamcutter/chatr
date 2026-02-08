@@ -52,7 +52,10 @@ func newManagerWithOptions(cask bool) (*manager.Manager, *config.Config, domain.
 		reg = registry.New(cfg.CacheDir)
 	}
 
-	st := state.New(cfg.ManifestFile)
+	st, err := state.New(cfg.ManifestFile)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
 
 	mgr := manager.New(
 		fetcher.New(cfg.CacheDir, 1*time.Hour),

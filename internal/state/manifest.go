@@ -15,42 +15,30 @@ type ManifestState struct {
 	manifest *domain.Manifest
 }
 
-func New(path string) *ManifestState {
-	return &ManifestState{
-		path: path,
-	}
-}
+func New(path string) (*ManifestState, error) {
+	m := &ManifestState{path: path}
 
-func (m *ManifestState) init() error {
-	if m.manifest != nil {
-		return nil
-	}
-	data, err := os.ReadFile(m.path)
+	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		m.manifest = domain.NewManifest()
-		return nil
+		return m, nil
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var manifest domain.Manifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
-		return err
+		return nil, err
 	}
 	if manifest.Packages == nil {
 		manifest.Packages = make(map[string]*domain.InstalledPackage)
 	}
 	m.manifest = &manifest
-	return nil
+	return m, nil
 }
 
 func (m *ManifestState) Load() (*domain.Manifest, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if err := m.init(); err != nil {
-		return nil, err
-	}
 	return m.manifest, nil
 }
 
@@ -75,9 +63,6 @@ func (m *ManifestState) flush() error {
 func (m *ManifestState) IsInstalled(name string) (bool, *domain.InstalledPackage, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if err := m.init(); err != nil {
-		return false, nil, err
-	}
 	pkg, exists := m.manifest.Packages[name]
 	if !exists {
 		return false, nil, nil
@@ -88,9 +73,6 @@ func (m *ManifestState) IsInstalled(name string) (bool, *domain.InstalledPackage
 func (m *ManifestState) Add(pkg *domain.InstalledPackage) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := m.init(); err != nil {
-		return err
-	}
 	m.manifest.Packages[pkg.Name] = pkg
 	return m.flush()
 }
@@ -98,18 +80,16 @@ func (m *ManifestState) Add(pkg *domain.InstalledPackage) error {
 func (m *ManifestState) ListInstalled() (map[string]*domain.InstalledPackage, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if err := m.init(); err != nil {
-		return nil, err
+	cp := make(map[string]*domain.InstalledPackage, len(m.manifest.Packages))
+	for k, v := range m.manifest.Packages {
+		cp[k] = v
 	}
-	return m.manifest.Packages, nil
+	return cp, nil
 }
 
 func (m *ManifestState) Remove(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := m.init(); err != nil {
-		return err
-	}
 	delete(m.manifest.Packages, name)
 	return m.flush()
 }
