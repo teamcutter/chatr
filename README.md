@@ -7,7 +7,7 @@ A package manager CLI for downloading, installing, and managing binary packages 
 ## Installation
 
 ```bash
-curl -sL https://raw.githubusercontent.com/teamcutter/chatr/main/install.sh | sh
+curl -sL https://raw.githubusercontent.com/teamcutter/chatr/main/install.sh | bash
 ```
 
 ## Usage

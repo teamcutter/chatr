@@ -1,5 +1,5 @@
-#!/bin/sh
-set -e
+#!/bin/bash
+set -euo pipefail
 
 REPO="teamcutter/chatr"
 INSTALL_DIR="$HOME/.chatr/bin"
@@ -20,22 +20,22 @@ case "$ARCH" in
 esac
 
 VERSION=$(curl -sL "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-if [ -z "$VERSION" ]; then
+if [[ -z "$VERSION" ]]; then
     echo "Failed to get latest version"
     exit 1
 fi
 
-if command -v chatr >/dev/null 2>&1; then
+if command -v chatr &>/dev/null; then
     CURRENT=$(chatr version 2>/dev/null | sed -E 's/chatr-v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
     LATEST="${VERSION#v}"
-    if [ "$CURRENT" = "$LATEST" ]; then
+    if [[ "$CURRENT" == "$LATEST" ]]; then
         echo "chatr $VERSION is already installed"
         exit 0
     fi
 fi
 
 EXT="tar.gz"
-if [ "$OS" = "windows" ]; then
+if [[ "$OS" == "windows" ]]; then
     EXT="zip"
 fi
 
@@ -50,30 +50,27 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 curl -sL "$URL" -o "$TMP_DIR/$FILENAME"
 
 mkdir -p "$INSTALL_DIR"
-if [ "$EXT" = "zip" ]; then
+if [[ "$EXT" == "zip" ]]; then
     unzip -q "$TMP_DIR/$FILENAME" -d "$TMP_DIR"
 else
     tar -xzf "$TMP_DIR/$FILENAME" -C "$TMP_DIR"
 fi
 
-if [ "$OS" = "linux" ]; then
+if [[ "$OS" == "linux" ]]; then
     rm -f "$INSTALL_DIR/chatr"
 fi
 cp "$TMP_DIR/chatr" "$INSTALL_DIR/chatr"
 chmod +x "$INSTALL_DIR/chatr"
 
-if [ "$OS" = "darwin" ]; then
+if [[ "$OS" == "darwin" ]]; then
     xattr -cr "$INSTALL_DIR/chatr" 2>/dev/null || true
 fi
 
 echo "Installed chatr to $INSTALL_DIR/chatr"
 
-case ":$PATH:" in
-    *":$INSTALL_DIR:"*) ;;
-    *)
-        echo ""
-        echo "Add chatr to your PATH by adding this to your shell config:"
-        echo ""
-        echo "  export PATH=\"\$HOME/.chatr/bin:\$PATH\""
-        ;;
-esac
+if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    echo ""
+    echo "Add chatr to your PATH by adding this to your shell config:"
+    echo ""
+    echo "  export PATH=\"\$HOME/.chatr/bin:\$PATH\""
+fi
