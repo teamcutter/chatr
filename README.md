@@ -49,7 +49,6 @@ chatr install <name>...
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--cask` | | `false` | Install a macOS application (cask) |
-| `--version` | `-v` | `latest` | Package version |
 | `--sha256` | | | Expected SHA256 checksum |
 
 ### remove
