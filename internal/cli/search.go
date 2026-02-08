@@ -34,7 +34,7 @@ func newSearchCmd() *cobra.Command {
 
 			size := min(len(results), show)
 
-			fmt.Printf("\nShowing %s of %s results for %q\n\n", green(size), green(len(results)), args[0])
+			fmt.Printf("Showing %s of %s results for %q\n\n", green(size), green(len(results)), args[0])
 
 			for i := range size {
 				fmt.Printf("%s %s\n", green("●"), bold(results[i].Name))

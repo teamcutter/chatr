@@ -18,6 +18,7 @@ type Cache interface {
 
 type Extractor interface {
 	Extract(src, dest string) error
+	ExtractApps(src, dest string) ([]string, error)
 }
 
 type State interface {

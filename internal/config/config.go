@@ -6,22 +6,19 @@ import (
 	"sync"
 
 	"github.com/BurntSushi/toml"
-	"github.com/teamcutter/chatr/internal/domain"
 )
 
 var configMu sync.Mutex
 
 type Config struct {
-	CacheDir        string                  `toml:"cache_dir"`
-	ChatrDir        string                  `toml:"chatr_dir"`
-	PackagesDir     string                  `toml:"packages_dir"`
-	BinDir          string                  `toml:"bin_dir"`
-	LibDir          string                  `toml:"lib_dir"`
-	AppsDir         string                  `toml:"apps_dir"`
-	ManifestFile    string                  `toml:"manifest_file"`
-	MaxParallel     int                     `toml:"max_parallel"`
-	Registries      []domain.RegistryConfig `toml:"registries"`
-	DefaultRegistry string                  `toml:"default_registry"`
+	CacheDir     string `toml:"cache_dir"`
+	ChatrDir     string `toml:"chatr_dir"`
+	PackagesDir  string `toml:"packages_dir"`
+	BinDir       string `toml:"bin_dir"`
+	LibDir       string `toml:"lib_dir"`
+	AppsDir      string `toml:"apps_dir"`
+	ManifestFile string `toml:"manifest_file"`
+	MaxParallel  int    `toml:"max_parallel"`
 }
 
 func DefaultConfig() *Config {
@@ -37,11 +34,6 @@ func DefaultConfig() *Config {
 		AppsDir:      "/Applications",
 		ManifestFile: filepath.Join(base, "installed.json"),
 		MaxParallel:  6,
-		Registries: []domain.RegistryConfig{
-			{Name: "homebrew", URL: "https://formulae.brew.sh/api/formula.json"},
-			{Name: "homebrew-cask", URL: "https://formulae.brew.sh/api/cask.json"},
-		},
-		DefaultRegistry: "homebrew",
 	}
 
 	return cfg

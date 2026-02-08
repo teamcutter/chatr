@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -20,6 +21,9 @@ type CaskRegistry struct {
 	sync.RWMutex
 	client   *http.Client
 	cacheDir string
+	index    map[string]*Cask
+	indexMu  sync.Once
+	indexErr error
 }
 
 type Cask struct {
@@ -40,7 +44,77 @@ func NewCask(cacheDir string) *CaskRegistry {
 	}
 }
 
+func (c *CaskRegistry) decodeIndex(r io.Reader) (map[string]*Cask, error) {
+	dec := json.NewDecoder(r)
+
+	if _, err := dec.Token(); err != nil {
+		return nil, err
+	}
+
+	index := make(map[string]*Cask)
+	for dec.More() {
+		var cask Cask
+		if err := dec.Decode(&cask); err != nil {
+			return nil, err
+		}
+		index[cask.Token] = &cask
+	}
+
+	return index, nil
+}
+
+func (c *CaskRegistry) loadIndex(ctx context.Context) error {
+	c.indexMu.Do(func() {
+		if cached, ok := c.getFromCache(10 * time.Minute); ok {
+			index, err := c.decodeIndex(bytes.NewReader(cached))
+			if err == nil {
+				c.index = index
+				return
+			}
+		}
+
+		url := baseUrl + "cask.json"
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			c.indexErr = fmt.Errorf("creating request: %w", err)
+			return
+		}
+		req.Header.Set("User-Agent", "chatr")
+
+		resp, err := c.client.Do(req)
+		if err != nil {
+			c.indexErr = fmt.Errorf("fetching casks: %w", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			c.indexErr = fmt.Errorf("unexpected status: %d", resp.StatusCode)
+			return
+		}
+
+		var buf bytes.Buffer
+		reader := io.TeeReader(resp.Body, &buf)
+
+		index, err := c.decodeIndex(reader)
+		if err != nil {
+			c.indexErr = fmt.Errorf("decoding response: %w", err)
+			return
+		}
+
+		c.index = index
+		_ = c.storeToCache(buf.Bytes())
+	})
+	return c.indexErr
+}
+
 func (c *CaskRegistry) Get(ctx context.Context, name string) (*domain.Formula, error) {
+	if c.index != nil {
+		if cask, ok := c.index[name]; ok {
+			return toFormulaCask(cask), nil
+		}
+	}
+
 	url := baseUrl + "cask/" + name + ".json"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -72,42 +146,14 @@ func (c *CaskRegistry) Get(ctx context.Context, name string) (*domain.Formula, e
 }
 
 func (c *CaskRegistry) Search(ctx context.Context, query string) ([]domain.Formula, error) {
-	var casks []Cask
-
-	if cached, ok := c.getFromCache(time.Minute * 10); ok {
-		if err := json.Unmarshal(cached, &casks); err == nil {
-			return filterAndSortCasks(casks, query), nil
-		}
+	if err := c.loadIndex(ctx); err != nil {
+		return nil, err
 	}
 
-	url := baseUrl + "cask.json"
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
+	casks := make([]Cask, 0, len(c.index))
+	for _, cask := range c.index {
+		casks = append(casks, *cask)
 	}
-	req.Header.Set("User-Agent", "chatr")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("fetching casks: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("reading response: %w", err)
-	}
-
-	if err := json.Unmarshal(data, &casks); err != nil {
-		return nil, fmt.Errorf("decoding response: %w", err)
-	}
-
-	_ = c.storeToCache(data)
 
 	return filterAndSortCasks(casks, query), nil
 }

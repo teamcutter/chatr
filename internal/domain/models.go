@@ -6,14 +6,11 @@ type Package struct {
 	Name        string
 	Version     string
 	Revision    string
+	FullVersion string
 	DownloadURL string
 	SHA256      string
 	IsDep       bool
 	IsCask      bool
-}
-
-func (p Package) FullVersion() string {
-	return formatVersion(p.Version, p.Revision)
 }
 
 type FetchResult struct {
@@ -38,7 +35,7 @@ type InstalledPackage struct {
 }
 
 func (p InstalledPackage) FullVersion() string {
-	return formatVersion(p.Version, p.Revision)
+	return FormatVersion(p.Version, p.Revision)
 }
 
 type Manifest struct {
@@ -47,11 +44,6 @@ type Manifest struct {
 
 func NewManifest() *Manifest {
 	return &Manifest{Packages: make(map[string]*InstalledPackage)}
-}
-
-type RegistryConfig struct {
-	Name string `toml:"name"`
-	URL  string `toml:"url"`
 }
 
 type Formula struct {
@@ -68,5 +60,5 @@ type Formula struct {
 }
 
 func (f Formula) FullVersion() string {
-	return formatVersion(f.Version, f.Revision)
+	return FormatVersion(f.Version, f.Revision)
 }

@@ -25,7 +25,6 @@ func newListCmd() *cobra.Command {
 				for _, name := range removed {
 					fmt.Printf("%s %s removed externally\n", dim("○"), name)
 				}
-				fmt.Println()
 			}
 
 			installed, err := mgr.ListInstalled()
@@ -52,7 +51,7 @@ func newListCmd() *cobra.Command {
 				if cask {
 					label = "casks"
 				}
-				fmt.Printf("\n%s No %s installed\n", dim("○"), label)
+				fmt.Printf("%s No %s installed\n", dim("○"), label)
 				return nil
 			}
 
@@ -81,7 +80,7 @@ func newListCmd() *cobra.Command {
 			if cask {
 				label = "Installed casks:"
 			}
-			fmt.Printf("%s\n\n", label)
+			fmt.Printf("%s\n", label)
 
 			for _, pkg := range packages {
 				line := fmt.Sprintf(" %s", bold(fmt.Sprintf("%s-%s", pkg.Name, pkg.FullVersion())))

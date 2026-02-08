@@ -38,6 +38,22 @@ func (e *Extractor) Extract(src, dst string) error {
 	}
 }
 
+func (e *Extractor) ExtractApps(src, dst string) ([]string, error) {
+	lower := strings.ToLower(src)
+
+	switch {
+	case strings.HasSuffix(lower, ".dmg"):
+		return e.dmg.ExtractApps(src, dst)
+	case strings.HasSuffix(lower, ".zip"):
+		return e.zip.ExtractApps(src, dst)
+	default:
+		if err := e.Extract(src, dst); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+}
+
 func isTarArchive(name string) bool {
 	tarExts := []string{".tar.gz", ".tar.zst", ".tar.xz", ".tar.bz2", ".tgz", ".txz", ".tzst", ".tbz2", ".tar"}
 	for _, ext := range tarExts {

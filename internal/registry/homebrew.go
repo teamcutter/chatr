@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,6 +25,9 @@ type HomebrewRegistry struct {
 	sync.RWMutex
 	client   *http.Client
 	cacheDir string
+	index    map[string]*Formulae
+	indexMu  sync.Once
+	indexErr error
 }
 
 type Formulae struct {
@@ -60,7 +64,77 @@ func New(cacheDir string) *HomebrewRegistry {
 	}
 }
 
+func (h *HomebrewRegistry) decodeIndex(r io.Reader) (map[string]*Formulae, error) {
+	dec := json.NewDecoder(r)
+
+	if _, err := dec.Token(); err != nil {
+		return nil, err
+	}
+
+	index := make(map[string]*Formulae)
+	for dec.More() {
+		var f Formulae
+		if err := dec.Decode(&f); err != nil {
+			return nil, err
+		}
+		index[f.Name] = &f
+	}
+
+	return index, nil
+}
+
+func (h *HomebrewRegistry) loadIndex(ctx context.Context) error {
+	h.indexMu.Do(func() {
+		if cached, ok := h.getFromCache(10 * time.Minute); ok {
+			index, err := h.decodeIndex(bytes.NewReader(cached))
+			if err == nil {
+				h.index = index
+				return
+			}
+		}
+
+		url := baseUrl + "formula.json"
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			h.indexErr = fmt.Errorf("creating request: %w", err)
+			return
+		}
+		req.Header.Set("User-Agent", "chatr")
+
+		resp, err := h.client.Do(req)
+		if err != nil {
+			h.indexErr = fmt.Errorf("fetching formulae: %w", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			h.indexErr = fmt.Errorf("unexpected status: %d", resp.StatusCode)
+			return
+		}
+
+		var buf bytes.Buffer
+		reader := io.TeeReader(resp.Body, &buf)
+
+		index, err := h.decodeIndex(reader)
+		if err != nil {
+			h.indexErr = fmt.Errorf("decoding response: %w", err)
+			return
+		}
+
+		h.index = index
+		_ = h.storeToCache(buf.Bytes())
+	})
+	return h.indexErr
+}
+
 func (h *HomebrewRegistry) Get(ctx context.Context, name string) (*domain.Formula, error) {
+	if h.index != nil {
+		if f, ok := h.index[name]; ok {
+			return h.toFormula(f), nil
+		}
+	}
+
 	url := baseUrl + "formula/" + name + ".json"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -92,42 +166,14 @@ func (h *HomebrewRegistry) Get(ctx context.Context, name string) (*domain.Formul
 }
 
 func (h *HomebrewRegistry) Search(ctx context.Context, query string) ([]domain.Formula, error) {
-	var formulae []Formulae
-
-	if cached, ok := h.getFromCache(time.Minute * 10); ok {
-		if err := json.Unmarshal(cached, &formulae); err == nil {
-			return h.filterAndSort(formulae, query), nil
-		}
+	if err := h.loadIndex(ctx); err != nil {
+		return nil, err
 	}
 
-	url := baseUrl + "formula.json"
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
+	formulae := make([]Formulae, 0, len(h.index))
+	for _, f := range h.index {
+		formulae = append(formulae, *f)
 	}
-	req.Header.Set("User-Agent", "chatr")
-
-	resp, err := h.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("fetching formulae: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("reading response: %w", err)
-	}
-
-	if err := json.Unmarshal(data, &formulae); err != nil {
-		return nil, fmt.Errorf("decoding response: %w", err)
-	}
-
-	_ = h.storeToCache(data)
 
 	return h.filterAndSort(formulae, query), nil
 }

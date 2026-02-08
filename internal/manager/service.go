@@ -50,45 +50,41 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 	}
 
 	var archivePath string
-	if m.cache.Has(pkg.Name, pkg.FullVersion()) {
-		archivePath = m.cache.GetPath(pkg.Name, pkg.FullVersion())
+	if m.cache.Has(pkg.Name, pkg.FullVersion) {
+		archivePath = m.cache.GetPath(pkg.Name, pkg.FullVersion)
 	} else {
 		result := m.fetcher.Fetch(ctx, pkg)
 		if result.Error != nil {
 			return nil, result.Error
 		}
 
-		archivePath, _ = m.cache.Store(pkg.Name, pkg.FullVersion(), result.Path)
+		var err error
+		archivePath, err = m.cache.Store(pkg.Name, pkg.FullVersion, result.Path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to cache %s: %w", pkg.Name, err)
+		}
 	}
 
-	// Ensure that if any previous installations
-	// failed, we extract into clear dir
-	pkgPath := filepath.Join(m.packagesDir, pkg.Name, pkg.FullVersion())
-	os.RemoveAll(pkgPath)
-
-	extractDest := m.packagesDir
-	if pkg.IsCask {
-		os.MkdirAll(pkgPath, 0755)
-		extractDest = pkgPath
-	}
-
-	if err := m.extractor.Extract(archivePath, extractDest); err != nil {
-		return nil, err
-	}
+	pkgPath := filepath.Join(m.packagesDir, pkg.Name, pkg.FullVersion)
 
 	var binaryNames []string
 	var appNames []string
 
 	if pkg.IsCask {
-		apps := findApps(pkgPath)
-		for _, appPath := range apps {
-			appName := filepath.Base(appPath)
-			if err := m.installApp(appPath, appName); err != nil {
-				return nil, err
-			}
-			appNames = append(appNames, appName)
+		apps, err := m.extractor.ExtractApps(archivePath, m.appsDir)
+		if err != nil {
+			return nil, err
 		}
+		appNames = apps
 	} else {
+		// Ensure that if any previous installations
+		// failed, we extract into clear dir
+		os.RemoveAll(pkgPath)
+
+		if err := m.extractor.Extract(archivePath, m.packagesDir); err != nil {
+			return nil, err
+		}
+
 		libs := findLibraries(pkgPath)
 		for _, libPath := range libs {
 			libName := filepath.Base(libPath)
@@ -416,30 +412,4 @@ func findExecutablesIn(binPath string) []string {
 	}
 
 	return executables
-}
-
-func findApps(dir string) []string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-
-	var apps []string
-	for _, e := range entries {
-		if e.IsDir() && strings.HasSuffix(e.Name(), ".app") {
-			apps = append(apps, filepath.Join(dir, e.Name()))
-		}
-	}
-	return apps
-}
-
-func (m *Manager) installApp(appPath, appName string) error {
-	if err := os.MkdirAll(m.appsDir, 0755); err != nil {
-		return fmt.Errorf("failed to create apps directory: %w", err)
-	}
-
-	dest := filepath.Join(m.appsDir, appName)
-	os.RemoveAll(dest)
-
-	return os.Rename(appPath, dest)
 }

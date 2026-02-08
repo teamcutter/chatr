@@ -41,7 +41,7 @@ func newUpgradeCmd() *cobra.Command {
 			}
 
 			if len(installed) == 0 {
-				fmt.Printf("\n%s No packages installed\n", dim("○"))
+				fmt.Printf("%s No packages installed\n", dim("○"))
 				return nil
 			}
 
@@ -100,6 +100,7 @@ func newUpgradeCmd() *cobra.Command {
 							Name:        rp.Formula.Name,
 							Version:     rp.Formula.Version,
 							Revision:    rp.Formula.Revision,
+							FullVersion: rp.Formula.FullVersion(),
 							DownloadURL: rp.Formula.URL,
 							SHA256:      rp.Formula.SHA256,
 							IsDep:       true,
@@ -130,13 +131,15 @@ func newUpgradeCmd() *cobra.Command {
 					oldVersion := installedPkg.FullVersion()
 
 					pkg, err := mgr.Upgrade(ctx, domain.Package{
-						Name:    name,
-						Version: installedPkg.Version,
-						IsCask:  installedPkg.IsCask,
+						Name:        name,
+						Version:     installedPkg.Version,
+						FullVersion: installedPkg.FullVersion(),
+						IsCask:      installedPkg.IsCask,
 					}, domain.Package{
 						Name:        rootFormula.Name,
 						Version:     rootFormula.Version,
 						Revision:    rootFormula.Revision,
+						FullVersion: rootFormula.FullVersion(),
 						DownloadURL: rootFormula.URL,
 						SHA256:      rootFormula.SHA256,
 						IsCask:      rootFormula.IsCask,

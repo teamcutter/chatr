@@ -17,12 +17,12 @@ func newNewCommand() *cobra.Command {
 			err := c.Run()
 			stop()
 
-			fmt.Println()
 			if err != nil {
-				return fmt.Errorf("%s failed to update chatr: %w", red("✗"), err)
+				fmt.Printf("%s Failed to update chatr: %v\n", red("✗"), err)
+				return fmt.Errorf("failed to update chatr")
 			}
 
-			fmt.Printf("%s chatr updated successfully!\n", green("✓"))
+			fmt.Printf("%s chatr updated\n", green("✓"))
 			return nil
 		},
 	}

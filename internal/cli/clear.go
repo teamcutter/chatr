@@ -25,7 +25,7 @@ func newClearCmd() *cobra.Command {
 
 			size, _ := c.Size()
 			if size == 0 {
-				fmt.Printf("\n%s Cache is empty\n", green("✓"))
+				fmt.Printf("%s Cache is empty\n", dim("○"))
 				return nil
 			}
 
@@ -33,7 +33,7 @@ func newClearCmd() *cobra.Command {
 				return fmt.Errorf("failed to clear cache: %w", err)
 			}
 
-			fmt.Printf("\n%s Cache cleared (%s freed)\n", green("✓"), formatSize(size))
+			fmt.Printf("%s Cache cleared (%s freed)\n", green("✓"), formatSize(size))
 			return nil
 		},
 	}

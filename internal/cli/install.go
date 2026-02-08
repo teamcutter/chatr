@@ -102,6 +102,7 @@ func newInstallCmd() *cobra.Command {
 						Name:        formula.Name,
 						Version:     formula.Version,
 						Revision:    formula.Revision,
+						FullVersion: formula.FullVersion(),
 						DownloadURL: formula.URL,
 						SHA256:      checksum,
 						IsDep:       rp.IsDep,

@@ -2,30 +2,12 @@
 
 A package manager CLI for downloading, installing, and managing binary packages and macOS applications (casks).
 
+![demo](demo.gif)
+
 ## Installation
 
 ```bash
 curl -sL https://raw.githubusercontent.com/teamcutter/chatr/main/install.sh | sh
-```
-
-Add the chatr bin directory to your PATH:
-
-```bash
-export PATH="$HOME/.chatr/bin:$PATH"
-```
-
-Add this line to your shell configuration file (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent.
-
-## Build from Source
-
-### Prerequisites
-
-- Go 1.25 or later
-
-### Build
-
-```bash
-mkdir -p ~/.chatr/bin && go build -o ~/.chatr/bin/chatr ./cmd/chatr
 ```
 
 ## Usage
@@ -50,8 +32,8 @@ Hello, world!
 ~/ chatr install --cask firefox
 Downloading firefox 100% |█████████████████████████████████████████████| (85/85 MB, 12 MB/s)
 
-✓ firefox@139.0
-  app: /Users/user/.chatr/apps/Firefox.app
+✓ firefox-147.0.3 (cask)
+  app: /Applications/Firefox.app
 ```
 
 ## Commands
@@ -142,6 +124,79 @@ Update chatr to the newest version.
 ```bash
 chatr new
 ```
+
+## Benchmarks
+
+chatr vs Homebrew on macOS (Apple Silicon). Each test ran 3 times.
+
+### Single install — `jq`
+
+| | Cold cache | Warm cache |
+|------|-----------|-----------|
+| chatr | ~3.1s | ~0.8s |
+| brew | ~11.9s | ~2.9s |
+| **Speedup** | **~3.8x** | **~3.8x** |
+
+### Multiple install — `jq tree wget ripgrep fd`
+
+| | Cold cache | Warm cache |
+|------|-----------|-----------|
+| chatr | ~8.5s | ~3.4s |
+| brew | ~13.9s | ~7.5s |
+| **Speedup** | **~1.6x** | **~2.2x** |
+
+### Cask install — `firefox`
+
+| | Cold cache |
+|------|-----------|
+| chatr | ~19.3s |
+| brew | ~29.5s |
+| **Speedup** | **~1.5x** |
+
+### Search — `json`
+
+| | Cold cache | Warm cache |
+|------|-----------|-----------|
+| chatr | ~2.4s | ~0.16s |
+| brew | ~3.3s | ~0.84s |
+| **Speedup** | **~1.4x** | **~5.3x** |
+
+## Build from Source
+
+### Prerequisites
+
+- Go 1.25 or later
+
+### Build
+
+```bash
+git clone https://github.com/teamcutter/chatr.git
+cd chatr
+mkdir -p ~/.chatr/bin && go build -o ~/.chatr/bin/chatr ./cmd/chatr
+```
+
+Make sure that chatr bin directory is in your PATH, otherwise add it:
+
+```bash
+export PATH="$HOME/.chatr/bin:$PATH"
+```
+
+Add this line to your shell configuration file (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent.
+
+## Registry
+
+chatr uses the [Homebrew](https://brew.sh) formulae and cask registry as its package source. All packages and macOS applications are resolved and downloaded from the Homebrew API.
+
+## Acknowledgements
+
+Built with the following open source libraries:
+
+- [cobra](https://github.com/spf13/cobra) — CLI framework
+- [toml](https://github.com/BurntSushi/toml) — configuration parsing
+- [color](https://github.com/fatih/color) — terminal colors
+- [progressbar](https://github.com/schollz/progressbar) — download progress
+- [compress](https://github.com/klauspost/compress) — zstd decompression
+- [xz](https://github.com/ulikunitz/xz) — xz decompression
 
 ## License
 

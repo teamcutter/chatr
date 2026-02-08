@@ -13,3 +13,7 @@ func NewDMG() *DMGExtractor {
 func (de *DMGExtractor) Extract(src, dst string) error {
 	return fmt.Errorf("dmg extraction is only supported on macOS")
 }
+
+func (de *DMGExtractor) ExtractApps(src, dst string) ([]string, error) {
+	return nil, fmt.Errorf("cask installation is only supported on macOS")
+}
