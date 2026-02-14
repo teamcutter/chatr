@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -67,6 +68,21 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 
 	pkgPath := filepath.Join(m.packagesDir, pkg.Name, pkg.FullVersion)
 
+	pendingPkg := &domain.InstalledPackage{
+		Name:        pkg.Name,
+		Version:     pkg.Version,
+		Revision:    pkg.Revision,
+		URL:         pkg.DownloadURL,
+		Path:        pkgPath,
+		IsDep:       pkg.IsDep,
+		IsCask:      pkg.IsCask,
+		InstalledAt: time.Now(),
+	}
+
+	if err := m.state.BeginInstall(pendingPkg); err != nil {
+		return nil, fmt.Errorf("failed to begin install: %w", err)
+	}
+
 	var binaryNames []string
 	var appNames []string
 
@@ -113,7 +129,7 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		Apps:        appNames,
 		IsDep:       pkg.IsDep,
 		IsCask:      pkg.IsCask,
-		InstalledAt: time.Now(),
+		InstalledAt: pendingPkg.InstalledAt,
 	}
 
 	if err := m.state.Add(installedPkg); err != nil {
@@ -179,10 +195,8 @@ func (m *Manager) isDependencyOf(dep, excludeName string) bool {
 		if name == excludeName {
 			continue
 		}
-		for _, d := range pkg.Dependencies {
-			if d == dep {
-				return true
-			}
+		if slices.Contains(pkg.Dependencies, dep) {
+			return true
 		}
 	}
 	return false
@@ -198,17 +212,112 @@ func (m *Manager) SetDependencies(name string, deps []string) error {
 }
 
 func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPackage domain.Package) (*domain.InstalledPackage, error) {
-	_, err := m.Remove(ctx, oldPackage)
-	if err != nil {
+	_, oldInstalled, _ := m.state.IsInstalled(oldPackage.Name)
+	var oldDeps []string
+	if oldInstalled != nil {
+		oldDeps = oldInstalled.Dependencies
+	}
+
+	var archivePath string
+	if m.cache.Has(newPackage.Name, newPackage.FullVersion) {
+		archivePath = m.cache.GetPath(newPackage.Name, newPackage.FullVersion)
+	} else {
+		result := m.fetcher.Fetch(ctx, newPackage)
+		if result.Error != nil {
+			return nil, result.Error
+		}
+		var err error
+		archivePath, err = m.cache.Store(newPackage.Name, newPackage.FullVersion, result.Path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to cache %s: %w", newPackage.Name, err)
+		}
+	}
+
+	pkgPath := filepath.Join(m.packagesDir, newPackage.Name, newPackage.FullVersion)
+
+	pendingPkg := &domain.InstalledPackage{
+		Name:         newPackage.Name,
+		Version:      newPackage.Version,
+		Revision:     newPackage.Revision,
+		URL:          newPackage.DownloadURL,
+		Path:         pkgPath,
+		Dependencies: oldDeps,
+		IsDep:        newPackage.IsDep,
+		IsCask:       newPackage.IsCask,
+		InstalledAt:  time.Now(),
+	}
+
+	if err := m.state.BeginInstall(pendingPkg); err != nil {
+		return nil, fmt.Errorf("failed to begin upgrade: %w", err)
+	}
+
+	if oldInstalled != nil {
+		if oldInstalled.IsCask {
+			for _, appName := range oldInstalled.Apps {
+				appPath := filepath.Join(m.appsDir, appName)
+				os.RemoveAll(appPath)
+			}
+		} else {
+			for _, binName := range oldInstalled.Binaries {
+				os.Remove(filepath.Join(m.binDir, binName))
+			}
+			for _, libPath := range findLibraries(oldInstalled.Path) {
+				os.Remove(filepath.Join(m.libDir, filepath.Base(libPath)))
+			}
+		}
+		os.RemoveAll(filepath.Join(m.packagesDir, oldPackage.Name))
+	}
+
+	var binaryNames []string
+	var appNames []string
+
+	if newPackage.IsCask {
+		apps, err := m.extractor.ExtractApps(archivePath, m.appsDir)
+		if err != nil {
+			return nil, err
+		}
+		appNames = apps
+	} else {
+		os.RemoveAll(pkgPath)
+		if err := m.extractor.Extract(archivePath, m.packagesDir); err != nil {
+			return nil, err
+		}
+
+		for _, libPath := range findLibraries(pkgPath) {
+			libName := filepath.Base(libPath)
+			m.createLibSymlink(libPath, libName)
+			patchRpath(libPath, m.libDir)
+		}
+
+		for _, binPath := range findBinaries(pkgPath) {
+			binName := filepath.Base(binPath)
+			if err := m.createSymlink(binPath, binName); err != nil {
+				return nil, err
+			}
+			binaryNames = append(binaryNames, binName)
+			patchRpath(binPath, m.libDir)
+		}
+	}
+
+	installedPkg := &domain.InstalledPackage{
+		Name:         newPackage.Name,
+		Version:      newPackage.Version,
+		Revision:     newPackage.Revision,
+		URL:          newPackage.DownloadURL,
+		Path:         pkgPath,
+		Binaries:     binaryNames,
+		Apps:         appNames,
+		Dependencies: oldDeps,
+		IsDep:        newPackage.IsDep,
+		IsCask:       newPackage.IsCask,
+		InstalledAt:  pendingPkg.InstalledAt,
+	}
+
+	if err := m.state.Add(installedPkg); err != nil {
 		return nil, err
 	}
 
-	installedPackage, err := m.Install(ctx, newPackage)
-	if err != nil {
-		return nil, err
-	}
-
-	return installedPackage, nil
+	return installedPkg, nil
 }
 
 func (m *Manager) ListInstalled() (map[string]*domain.InstalledPackage, error) {

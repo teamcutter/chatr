@@ -52,7 +52,7 @@ func newManagerWithOptions(cask bool) (*manager.Manager, *config.Config, domain.
 		reg = registry.New(cfg.CacheDir)
 	}
 
-	st, err := state.New(cfg.ManifestFile)
+	st, err := state.NewSQLite(cfg.StateDB, cfg.ManifestFile)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

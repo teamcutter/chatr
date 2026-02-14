@@ -29,6 +29,7 @@ type State interface {
 	Remove(name string) error
 	Flush() error
 	ListInstalled() (map[string]*InstalledPackage, error)
+	BeginInstall(pkg *InstalledPackage) error
 }
 
 type Registry interface {
