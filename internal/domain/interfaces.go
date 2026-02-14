@@ -27,6 +27,7 @@ type State interface {
 	IsInstalled(name string) (bool, *InstalledPackage, error)
 	Add(pkg *InstalledPackage) error
 	Remove(name string) error
+	Flush() error
 	ListInstalled() (map[string]*InstalledPackage, error)
 }
 

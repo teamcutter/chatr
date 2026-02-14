@@ -56,6 +56,10 @@ func newRemoveCmd() *cobra.Command {
 				fmt.Printf("%s %s%s%s removed (with %s dependencies)\n", green("✓"), bold(removedPackage.Name), bold("-"), bold(removedPackage.FullVersion()), green(len(removedPackage.Dependencies)))
 			}
 
+			if err := mgr.Flush(); err != nil {
+				return fmt.Errorf("failed to save state: %w", err)
+			}
+
 			if failed > 0 {
 				return fmt.Errorf("failed to remove %d package(s)", failed)
 			}

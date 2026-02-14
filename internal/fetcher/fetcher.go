@@ -26,7 +26,15 @@ type HTTPFetcher struct {
 
 func New(outputDir string, timeout time.Duration) *HTTPFetcher {
 	return &HTTPFetcher{
-		client:    &http.Client{Timeout: timeout},
+		client: &http.Client{
+			Timeout: timeout,
+			Transport: &http.Transport{
+				MaxIdleConns:        32,
+				MaxIdleConnsPerHost: 8,
+				IdleConnTimeout:     30 * time.Second,
+				ForceAttemptHTTP2:   true,
+			},
+		},
 		outputDir: outputDir,
 		timeout:   timeout,
 	}
@@ -85,16 +93,19 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, pkg domain.Package) domain.Fetc
 		fmt.Sprintf("Downloading %s", pkg.Name),
 	)
 
-	if _, err := io.Copy(io.MultiWriter(file, bar), resp.Body); err != nil {
+	writers := []io.Writer{file, bar}
+
+	h := sha256.New()
+	if pkg.SHA256 != "" {
+		writers = append(writers, h)
+	}
+
+	if _, err := io.Copy(io.MultiWriter(writers...), resp.Body); err != nil {
 		return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Error: err}
 	}
 
 	if pkg.SHA256 != "" {
-		actual, err := computeChecksum(dst)
-		if err != nil {
-			return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Error: err}
-		}
-
+		actual := hex.EncodeToString(h.Sum(nil))
 		if actual != pkg.SHA256 {
 			os.Remove(dst)
 			return domain.FetchResult{
@@ -106,20 +117,6 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, pkg domain.Package) domain.Fetc
 	}
 
 	return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Path: dst}
-}
-
-func computeChecksum(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // Detailed here

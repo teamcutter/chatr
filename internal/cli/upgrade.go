@@ -34,6 +34,7 @@ func newUpgradeCmd() *cobra.Command {
 			}
 
 			mgr.Reconcile()
+			mgr.Flush()
 
 			installed, err := mgr.ListInstalled()
 			if err != nil {
@@ -167,6 +168,10 @@ func newUpgradeCmd() *cobra.Command {
 			}
 
 			_ = g.Wait()
+
+			if err := mgr.Flush(); err != nil {
+				return fmt.Errorf("failed to save state: %w", err)
+			}
 
 			fmt.Println()
 			for _, s := range upgraded {

@@ -25,6 +25,7 @@ func newListCmd() *cobra.Command {
 				for _, name := range removed {
 					fmt.Printf("%s %s removed externally\n", dim("○"), name)
 				}
+				mgr.Flush()
 			}
 
 			installed, err := mgr.ListInstalled()

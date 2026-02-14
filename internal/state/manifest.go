@@ -13,6 +13,7 @@ type ManifestState struct {
 	mu       sync.RWMutex
 	path     string
 	manifest *domain.Manifest
+	dirty    bool
 }
 
 func New(path string) (*ManifestState, error) {
@@ -74,7 +75,8 @@ func (m *ManifestState) Add(pkg *domain.InstalledPackage) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.manifest.Packages[pkg.Name] = pkg
-	return m.flush()
+	m.dirty = true
+	return nil
 }
 
 func (m *ManifestState) ListInstalled() (map[string]*domain.InstalledPackage, error) {
@@ -91,5 +93,16 @@ func (m *ManifestState) Remove(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.manifest.Packages, name)
+	m.dirty = true
+	return nil
+}
+
+func (m *ManifestState) Flush() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.dirty {
+		return nil
+	}
+	m.dirty = false
 	return m.flush()
 }

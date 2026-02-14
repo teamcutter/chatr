@@ -238,6 +238,10 @@ func (m *Manager) Reconcile() []string {
 	return removed
 }
 
+func (m *Manager) Flush() error {
+	return m.state.Flush()
+}
+
 func (m *Manager) Clear(ctx context.Context) error {
 	return m.cache.Clear()
 }

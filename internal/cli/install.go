@@ -153,6 +153,10 @@ func newInstallCmd() *cobra.Command {
 				}
 			}
 
+			if err := mgr.Flush(); err != nil {
+				return fmt.Errorf("failed to save state: %w", err)
+			}
+
 			fmt.Println()
 			for _, rp := range plan {
 				if msg, ok := output[rp.Formula.Name]; ok {
