@@ -19,11 +19,11 @@ import (
 
 type CaskRegistry struct {
 	sync.RWMutex
-	client   *http.Client
-	cacheDir string
-	index    map[string]*Cask
-	indexMu  sync.Once
-	indexErr error
+	client      *http.Client
+	formulaeDir string
+	index       map[string]*Cask
+	indexMu     sync.Once
+	indexErr    error
 }
 
 type Cask struct {
@@ -37,10 +37,10 @@ type Cask struct {
 	Artifacts []json.RawMessage `json:"artifacts"`
 }
 
-func NewCask(cacheDir string) *CaskRegistry {
+func NewCask(formulaeDir string) *CaskRegistry {
 	return &CaskRegistry{
-		client:   &http.Client{},
-		cacheDir: cacheDir,
+		client:      &http.Client{},
+		formulaeDir: formulaeDir,
 	}
 }
 
@@ -65,7 +65,7 @@ func (c *CaskRegistry) decodeIndex(r io.Reader) (map[string]*Cask, error) {
 
 func (c *CaskRegistry) loadIndex(ctx context.Context) error {
 	c.indexMu.Do(func() {
-		if cached, ok := c.getFromCache(10 * time.Minute); ok {
+		if cached, ok := c.getFromCached(10 * time.Minute); ok {
 			index, err := c.decodeIndex(bytes.NewReader(cached))
 			if err == nil {
 				c.index = index
@@ -109,40 +109,15 @@ func (c *CaskRegistry) loadIndex(ctx context.Context) error {
 }
 
 func (c *CaskRegistry) Get(ctx context.Context, name string) (*domain.Formula, error) {
-	if c.index != nil {
-		if cask, ok := c.index[name]; ok {
-			return toFormulaCask(cask), nil
-		}
+	if err := c.loadIndex(ctx); err != nil {
+		return nil, err
 	}
 
-	url := baseUrl + "cask/" + name + ".json"
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
-	}
-	req.Header.Set("User-Agent", "chatr")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("fetching cask: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("cask %q not found", name)
+	if cask, ok := c.index[name]; ok {
+		return toFormulaCask(cask), nil
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	var cask Cask
-	if err := json.NewDecoder(resp.Body).Decode(&cask); err != nil {
-		return nil, fmt.Errorf("decoding response: %w", err)
-	}
-
-	return toFormulaCask(&cask), nil
+	return nil, fmt.Errorf("cask %q not found", name)
 }
 
 func (c *CaskRegistry) Search(ctx context.Context, query string) ([]domain.Formula, error) {
@@ -166,11 +141,11 @@ func (c *CaskRegistry) GetVersion(ctx context.Context, name string) (string, err
 	return formula.Version, nil
 }
 
-func (c *CaskRegistry) getFromCache(ttl time.Duration) ([]byte, bool) {
+func (c *CaskRegistry) getFromCached(ttl time.Duration) ([]byte, bool) {
 	c.RLock()
 	defer c.RUnlock()
 
-	path := filepath.Join(c.cacheDir, "casks.json")
+	path := filepath.Join(c.formulaeDir, "casks.json")
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, false
@@ -192,7 +167,11 @@ func (c *CaskRegistry) storeToCache(data []byte) error {
 	c.Lock()
 	defer c.Unlock()
 
-	path := filepath.Join(c.cacheDir, "casks.json")
+	if err := os.MkdirAll(c.formulaeDir, 0755); err != nil {
+		return err
+	}
+
+	path := filepath.Join(c.formulaeDir, "casks.json")
 	return os.WriteFile(path, data, 0644)
 }
 

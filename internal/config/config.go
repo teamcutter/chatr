@@ -17,6 +17,7 @@ type Config struct {
 	BinDir       string `toml:"bin_dir"`
 	LibDir       string `toml:"lib_dir"`
 	AppsDir      string `toml:"apps_dir"`
+	FormulaeDir  string `toml:"formulae_dir"`
 	ManifestFile string `toml:"manifest_file"`
 	StateDB      string `toml:"state_db"`
 	MaxParallel  int    `toml:"max_parallel"`
@@ -33,6 +34,7 @@ func DefaultConfig() *Config {
 		BinDir:       filepath.Join(base, "bin"),
 		LibDir:       filepath.Join(base, "lib"),
 		AppsDir:      "/Applications",
+		FormulaeDir:  filepath.Join(base, "formulae"),
 		ManifestFile: filepath.Join(base, "installed.json"),
 		StateDB:      filepath.Join(base, "state.db"),
 		MaxParallel:  6,

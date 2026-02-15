@@ -126,39 +126,39 @@ chatr new
 
 ## Benchmarks
 
-chatr vs Homebrew on macOS (Apple Silicon). Each test ran 3 times.
+chatr vs Homebrew on macOS (Apple Silicon). Measured with [hyperfine](https://github.com/sharkdp/hyperfine), 3 runs each.
 
 ### Single install — `jq`
 
 | | Cold cache | Warm cache |
 |------|-----------|-----------|
-| chatr | ~3.1s | ~0.8s |
-| brew | ~11.9s | ~2.9s |
-| **Speedup** | **~3.8x** | **~3.8x** |
+| chatr | ~10.5s | ~303ms |
+| brew | ~3.7s | ~3.1s |
+| **Speedup** | — | **~10.2x** |
 
 ### Multiple install — `jq tree wget ripgrep fd`
 
 | | Cold cache | Warm cache |
 |------|-----------|-----------|
-| chatr | ~8.5s | ~3.4s |
-| brew | ~13.9s | ~7.5s |
-| **Speedup** | **~1.6x** | **~2.2x** |
+| chatr | ~11.1s | ~2.8s |
+| brew | ~82.4s | ~7.9s |
+| **Speedup** | **~7.5x** | **~2.9x** |
 
 ### Cask install — `firefox`
 
 | | Cold cache |
 |------|-----------|
-| chatr | ~19.3s |
-| brew | ~29.5s |
-| **Speedup** | **~1.5x** |
+| chatr | ~25.8s |
+| brew | ~107.6s |
+| **Speedup** | **~4.2x** |
 
 ### Search — `json`
 
 | | Cold cache | Warm cache |
 |------|-----------|-----------|
-| chatr | ~2.4s | ~0.16s |
-| brew | ~3.3s | ~0.84s |
-| **Speedup** | **~1.4x** | **~5.3x** |
+| chatr | ~170ms | ~165ms |
+| brew | ~897ms | ~876ms |
+| **Speedup** | **~5.3x** | **~5.3x** |
 
 ## Build from Source
 
