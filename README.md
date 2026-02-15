@@ -132,9 +132,9 @@ chatr vs Homebrew on macOS (Apple Silicon). Measured with [hyperfine](https://gi
 
 | | Cold cache | Warm cache |
 |------|-----------|-----------|
-| chatr | ~10.5s | ~303ms |
-| brew | ~3.7s | ~3.1s |
-| **Speedup** | — | **~10.2x** |
+| chatr | ~1.5s | ~303ms |
+| brew | ~12.1s | ~3.1s |
+| **Speedup** | **~8x** | **~10.2x** |
 
 ### Multiple install — `jq tree wget ripgrep fd`
 
