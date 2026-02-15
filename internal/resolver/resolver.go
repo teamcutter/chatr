@@ -3,8 +3,10 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/teamcutter/chatr/internal/domain"
+	"golang.org/x/sync/errgroup"
 )
 
 type Resolver struct {
@@ -26,24 +28,58 @@ func New(registry domain.Registry, state domain.State) *Resolver {
 }
 
 func (r *Resolver) Resolve(ctx context.Context, name string) ([]ResolvedPackage, error) {
-	var result []ResolvedPackage
-	visiting := make(map[string]bool)
-	visited := make(map[string]bool)
+	var mu sync.Mutex
+	fetched := make(map[string]*domain.Formula)
 
-	if err := r.resolve(ctx, name, false, visiting, visited, &result); err != nil {
+	if err := r.fetchAll(ctx, name, fetched, &mu); err != nil {
 		return nil, err
 	}
+
+	var result []ResolvedPackage
+	visited := make(map[string]bool)
+	r.buildResult(name, false, fetched, visited, &result)
 
 	return result, nil
 }
 
-func (r *Resolver) resolve(ctx context.Context, name string, isDep bool, visiting, visited map[string]bool, result *[]ResolvedPackage) error {
-	if visited[name] {
+func (r *Resolver) fetchAll(ctx context.Context, name string, fetched map[string]*domain.Formula, mu *sync.Mutex) error {
+	mu.Lock()
+	if _, exists := fetched[name]; exists {
+		mu.Unlock()
 		return nil
 	}
+	fetched[name] = nil
+	mu.Unlock()
 
-	if visiting[name] {
-		return fmt.Errorf("dependency cycle detected: %s", name)
+	formula, err := r.registry.Get(ctx, name)
+	if err != nil {
+		return fmt.Errorf("resolving %s: %w", name, err)
+	}
+
+	mu.Lock()
+	fetched[name] = formula
+	deps := formula.Dependencies
+	mu.Unlock()
+
+	g, ctx := errgroup.WithContext(ctx)
+	for _, dep := range deps {
+		g.Go(func() error {
+			return r.fetchAll(ctx, dep, fetched, mu)
+		})
+	}
+
+	return g.Wait()
+}
+
+func (r *Resolver) buildResult(name string, isDep bool, fetched map[string]*domain.Formula, visited map[string]bool, result *[]ResolvedPackage) {
+	if visited[name] {
+		return
+	}
+	visited[name] = true
+
+	formula := fetched[name]
+	for _, dep := range formula.Dependencies {
+		r.buildResult(dep, true, fetched, visited, result)
 	}
 
 	alreadyInstalled := false
@@ -53,27 +89,9 @@ func (r *Resolver) resolve(ctx context.Context, name string, isDep bool, visitin
 		}
 	}
 
-	visiting[name] = true
-
-	formula, err := r.registry.Get(ctx, name)
-	if err != nil {
-		return fmt.Errorf("resolving %s: %w", name, err)
-	}
-
-	for _, dep := range formula.Dependencies {
-		if err := r.resolve(ctx, dep, true, visiting, visited, result); err != nil {
-			return err
-		}
-	}
-
-	delete(visiting, name)
-	visited[name] = true
-
 	*result = append(*result, ResolvedPackage{
 		Formula:          *formula,
 		IsDep:            isDep,
 		AlreadyInstalled: alreadyInstalled,
 	})
-
-	return nil
 }

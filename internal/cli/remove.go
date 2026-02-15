@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/teamcutter/chatr/internal/domain"
@@ -26,18 +25,20 @@ func newRemoveCmd() *cobra.Command {
 
 			packages := args
 			if all {
-				installed, err := mgr.List()
+				installed, err := mgr.ListInstalled()
 				if err != nil {
 					return err
 				}
-				if len(installed) == 0 {
+				packages = make([]string, 0, len(installed))
+				for name, pkg := range installed {
+					if pkg.IsDep {
+						continue
+					}
+					packages = append(packages, name)
+				}
+				if len(packages) == 0 {
 					fmt.Printf("%s No packages installed\n", dim("○"))
 					return nil
-				}
-				packages = make([]string, 0, len(installed))
-				for _, pkg := range installed {
-					name := pkg[:strings.LastIndex(pkg, "-")]
-					packages = append(packages, name)
 				}
 			}
 

@@ -27,6 +27,7 @@ type InstalledPackage struct {
 	URL          string    `json:"url"`
 	Path         string    `json:"path"`
 	Binaries     []string  `json:"binaries"`
+	Libs         []string  `json:"libs,omitempty"`
 	Apps         []string  `json:"apps,omitempty"`
 	Dependencies []string  `json:"dependencies,omitempty"`
 	IsDep        bool      `json:"is_dep,omitempty"`

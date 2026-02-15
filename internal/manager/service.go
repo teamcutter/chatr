@@ -84,6 +84,7 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 	}
 
 	var binaryNames []string
+	var libNames []string
 	var appNames []string
 
 	if pkg.IsCask {
@@ -101,21 +102,20 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 			return nil, err
 		}
 
-		libs := findLibraries(pkgPath)
-		for _, libPath := range libs {
+		for _, libPath := range findLibraries(pkgPath) {
 			libName := filepath.Base(libPath)
 			m.createLibSymlink(libPath, libName)
 			patchRpath(libPath, m.libDir)
+			libNames = append(libNames, libName)
 		}
 
-		binaries := findBinaries(pkgPath)
-		for _, binPath := range binaries {
+		for _, binPath := range findBinaries(pkgPath) {
 			binName := filepath.Base(binPath)
 			if err := m.createSymlink(binPath, binName); err != nil {
 				return nil, err
 			}
-			binaryNames = append(binaryNames, binName)
 			patchRpath(binPath, m.libDir)
+			binaryNames = append(binaryNames, binName)
 		}
 	}
 
@@ -126,6 +126,7 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		URL:         pkg.DownloadURL,
 		Path:        pkgPath,
 		Binaries:    binaryNames,
+		Libs:        libNames,
 		Apps:        appNames,
 		IsDep:       pkg.IsDep,
 		IsCask:      pkg.IsCask,
@@ -154,16 +155,10 @@ func (m *Manager) Remove(ctx context.Context, pkg domain.Package) (*domain.Insta
 		}
 	} else {
 		for _, binName := range installedPkg.Binaries {
-			binaryPath := filepath.Join(m.binDir, binName)
-			if err := os.Remove(binaryPath); err != nil && !os.IsNotExist(err) {
-				return nil, err
-			}
+			os.Remove(filepath.Join(m.binDir, binName))
 		}
-
-		libs := findLibraries(installedPkg.Path)
-		for _, libPath := range libs {
-			linkPath := filepath.Join(m.libDir, filepath.Base(libPath))
-			os.Remove(linkPath)
+		for _, libName := range installedPkg.Libs {
+			os.Remove(filepath.Join(m.libDir, libName))
 		}
 	}
 
@@ -261,14 +256,15 @@ func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPac
 			for _, binName := range oldInstalled.Binaries {
 				os.Remove(filepath.Join(m.binDir, binName))
 			}
-			for _, libPath := range findLibraries(oldInstalled.Path) {
-				os.Remove(filepath.Join(m.libDir, filepath.Base(libPath)))
+			for _, libName := range oldInstalled.Libs {
+				os.Remove(filepath.Join(m.libDir, libName))
 			}
 		}
 		os.RemoveAll(filepath.Join(m.packagesDir, oldPackage.Name))
 	}
 
 	var binaryNames []string
+	var libNames []string
 	var appNames []string
 
 	if newPackage.IsCask {
@@ -287,6 +283,7 @@ func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPac
 			libName := filepath.Base(libPath)
 			m.createLibSymlink(libPath, libName)
 			patchRpath(libPath, m.libDir)
+			libNames = append(libNames, libName)
 		}
 
 		for _, binPath := range findBinaries(pkgPath) {
@@ -294,8 +291,8 @@ func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPac
 			if err := m.createSymlink(binPath, binName); err != nil {
 				return nil, err
 			}
-			binaryNames = append(binaryNames, binName)
 			patchRpath(binPath, m.libDir)
+			binaryNames = append(binaryNames, binName)
 		}
 	}
 
@@ -306,6 +303,7 @@ func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPac
 		URL:          newPackage.DownloadURL,
 		Path:         pkgPath,
 		Binaries:     binaryNames,
+		Libs:         libNames,
 		Apps:         appNames,
 		Dependencies: oldDeps,
 		IsDep:        newPackage.IsDep,
@@ -353,24 +351,6 @@ func (m *Manager) Flush() error {
 
 func (m *Manager) Clear(ctx context.Context) error {
 	return m.cache.Clear()
-}
-
-func (m *Manager) List() ([]string, error) {
-	manifest, err := m.state.Load()
-	if err != nil {
-		return make([]string, 0), err
-	}
-
-	packages := make([]string, 0, len(manifest.Packages))
-	for _, pkg := range manifest.Packages {
-		if pkg.IsDep {
-			continue
-		}
-		packageItem := fmt.Sprintf("%s-%s", pkg.Name, pkg.FullVersion())
-		packages = append(packages, packageItem)
-	}
-
-	return packages, nil
 }
 
 func (m *Manager) createSymlink(path, binName string) error {

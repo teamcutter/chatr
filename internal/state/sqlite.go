@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS packages (
     url          TEXT NOT NULL,
     path         TEXT NOT NULL,
     binaries     TEXT NOT NULL DEFAULT '[]',
+    libs         TEXT NOT NULL DEFAULT '[]',
     apps         TEXT NOT NULL DEFAULT '[]',
     dependencies TEXT NOT NULL DEFAULT '[]',
     is_dep       INTEGER NOT NULL DEFAULT 0,
@@ -170,15 +171,16 @@ func (s *SQLiteState) recover() error {
 
 func (s *SQLiteState) insertPkg(tx *sql.Tx, pkg *domain.InstalledPackage, status string) error {
 	binaries, _ := json.Marshal(pkg.Binaries)
+	libs, _ := json.Marshal(pkg.Libs)
 	apps, _ := json.Marshal(pkg.Apps)
 	deps, _ := json.Marshal(pkg.Dependencies)
 
 	_, err := tx.Exec(`
 		INSERT OR REPLACE INTO packages
-		(name, version, revision, url, path, binaries, apps, dependencies, is_dep, is_cask, installed_at, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(name, version, revision, url, path, binaries, libs, apps, dependencies, is_dep, is_cask, installed_at, status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		pkg.Name, pkg.Version, pkg.Revision, pkg.URL, pkg.Path,
-		string(binaries), string(apps), string(deps),
+		string(binaries), string(libs), string(apps), string(deps),
 		boolToInt(pkg.IsDep), boolToInt(pkg.IsCask),
 		pkg.InstalledAt.Format(time.RFC3339), status)
 	return err
@@ -239,20 +241,21 @@ func (s *SQLiteState) IsInstalled(name string) (bool, *domain.InstalledPackage, 
 
 func (s *SQLiteState) getPkg(name string) (*domain.InstalledPackage, error) {
 	var pkg domain.InstalledPackage
-	var binaries, apps, deps, installedAt, status string
+	var binaries, libs, apps, deps, installedAt, status string
 	var isDep, isCask int
 
 	err := s.db.QueryRow(`
-		SELECT name, version, revision, url, path, binaries, apps, dependencies,
+		SELECT name, version, revision, url, path, binaries, libs, apps, dependencies,
 		       is_dep, is_cask, installed_at, status
 		FROM packages WHERE name = ? AND status = 'installed'`, name).Scan(
 		&pkg.Name, &pkg.Version, &pkg.Revision, &pkg.URL, &pkg.Path,
-		&binaries, &apps, &deps, &isDep, &isCask, &installedAt, &status)
+		&binaries, &libs, &apps, &deps, &isDep, &isCask, &installedAt, &status)
 	if err != nil {
 		return nil, err
 	}
 
 	json.Unmarshal([]byte(binaries), &pkg.Binaries)
+	json.Unmarshal([]byte(libs), &pkg.Libs)
 	json.Unmarshal([]byte(apps), &pkg.Apps)
 	json.Unmarshal([]byte(deps), &pkg.Dependencies)
 	pkg.IsDep = isDep == 1
@@ -301,7 +304,7 @@ func (s *SQLiteState) ListInstalled() (map[string]*domain.InstalledPackage, erro
 
 func (s *SQLiteState) listInstalled() (map[string]*domain.InstalledPackage, error) {
 	rows, err := s.db.Query(`
-		SELECT name, version, revision, url, path, binaries, apps, dependencies,
+		SELECT name, version, revision, url, path, binaries, libs, apps, dependencies,
 		       is_dep, is_cask, installed_at
 		FROM packages WHERE status = 'installed'`)
 	if err != nil {
@@ -312,15 +315,16 @@ func (s *SQLiteState) listInstalled() (map[string]*domain.InstalledPackage, erro
 	pkgs := make(map[string]*domain.InstalledPackage)
 	for rows.Next() {
 		var pkg domain.InstalledPackage
-		var binaries, apps, deps, installedAt string
+		var binaries, libs, apps, deps, installedAt string
 		var isDep, isCask int
 
 		if err := rows.Scan(&pkg.Name, &pkg.Version, &pkg.Revision, &pkg.URL, &pkg.Path,
-			&binaries, &apps, &deps, &isDep, &isCask, &installedAt); err != nil {
+			&binaries, &libs, &apps, &deps, &isDep, &isCask, &installedAt); err != nil {
 			return nil, err
 		}
 
 		json.Unmarshal([]byte(binaries), &pkg.Binaries)
+		json.Unmarshal([]byte(libs), &pkg.Libs)
 		json.Unmarshal([]byte(apps), &pkg.Apps)
 		json.Unmarshal([]byte(deps), &pkg.Dependencies)
 		pkg.IsDep = isDep == 1
