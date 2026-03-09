@@ -175,6 +175,40 @@ func (c *CaskRegistry) storeToCache(data []byte) error {
 	return os.WriteFile(path, data, 0644)
 }
 
+func (c *CaskRegistry) Update(ctx context.Context) (int, error) {
+	url := baseUrl + "cask.json"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return 0, fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("User-Agent", "chatr")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("fetching casks: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	var buf bytes.Buffer
+	reader := io.TeeReader(resp.Body, &buf)
+
+	index, err := c.decodeIndex(reader)
+	if err != nil {
+		return 0, fmt.Errorf("decoding response: %w", err)
+	}
+
+	c.index = index
+	if err := c.storeToCache(buf.Bytes()); err != nil {
+		return 0, fmt.Errorf("storing cache: %w", err)
+	}
+
+	return len(index), nil
+}
+
 func filterAndSortCasks(casks []Cask, query string) []domain.Formula {
 	query = strings.ToLower(query)
 	var results []domain.Formula

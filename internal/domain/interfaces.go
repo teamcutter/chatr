@@ -36,4 +36,5 @@ type Registry interface {
 	Get(ctx context.Context, name string) (*Formula, error)
 	Search(ctx context.Context, query string) ([]Formula, error)
 	GetVersion(ctx context.Context, name string) (string, error)
+	Update(ctx context.Context) (int, error)
 }
