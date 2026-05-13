@@ -18,9 +18,9 @@ curl -sL https://raw.githubusercontent.com/teamcutter/chatr/main/install.sh | ba
 ~/ chatr install hello
 Downloading hello 100% |█████████████████████████████████████████████| (53/53 kB, 540 kB/s)
 
-✓ hello@2.12.2
-  cache: /Users/user/.chatr/cache/hello/2.12.2
-  path: /Users/user/.chatr/packages/hello/2.12.2
+✓ hello-2.12.2
+  cellar: /Users/user/.chatr/Cellar/hello/2.12.2
+  opt: /Users/user/.chatr/opt/hello
 
 ~/ hello
 Hello, world!
@@ -99,6 +99,18 @@ chatr upgrade [name...]
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--all` | | `false` | Upgrade all installed packages |
+
+### tldr
+
+Show package summary and manual.
+
+```bash
+chatr tldr jq
+```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--cask` | | `false` | Show cask info |
 
 ### clear
 
