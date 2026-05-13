@@ -11,16 +11,23 @@ import (
 var configMu sync.Mutex
 
 type Config struct {
-	CacheDir     string `toml:"cache_dir"`
-	ChatrDir     string `toml:"chatr_dir"`
-	PackagesDir  string `toml:"packages_dir"`
-	BinDir       string `toml:"bin_dir"`
-	LibDir       string `toml:"lib_dir"`
-	AppsDir      string `toml:"apps_dir"`
-	FormulaeDir  string `toml:"formulae_dir"`
-	ManifestFile string `toml:"manifest_file"`
-	StateDB      string `toml:"state_db"`
-	MaxParallel  int    `toml:"max_parallel"`
+	CacheDir      string `toml:"cache_dir"`
+	ChatrDir      string `toml:"chatr_dir"`
+	PackagesDir   string `toml:"packages_dir"`
+	BinDir        string `toml:"bin_dir"`
+	LibDir        string `toml:"lib_dir"`
+	AppsDir       string `toml:"apps_dir"`
+	FormulaeDir   string `toml:"formulae_dir"`
+	ManifestFile  string `toml:"manifest_file"`
+	StateDB       string `toml:"state_db"`
+	MaxParallel   int    `toml:"max_parallel"`
+	CellarDir     string `toml:"cellar_dir"`
+	OptDir        string `toml:"opt_dir"`
+	IncludeDir    string `toml:"include_dir"`
+	ShareDir      string `toml:"share_dir"`
+	EtcDir        string `toml:"etc_dir"`
+	VarDir        string `toml:"var_dir"`
+	FrameworksDir string `toml:"frameworks_dir"`
 }
 
 func DefaultConfig() *Config {
@@ -28,16 +35,23 @@ func DefaultConfig() *Config {
 	base := filepath.Join(home, ".chatr")
 
 	cfg := &Config{
-		CacheDir:     filepath.Join(base, "cache"),
-		ChatrDir:     base,
-		PackagesDir:  filepath.Join(base, "packages"),
-		BinDir:       filepath.Join(base, "bin"),
-		LibDir:       filepath.Join(base, "lib"),
-		AppsDir:      "/Applications",
-		FormulaeDir:  filepath.Join(base, "formulae"),
-		ManifestFile: filepath.Join(base, "installed.json"),
-		StateDB:      filepath.Join(base, "state.db"),
-		MaxParallel:  6,
+		CacheDir:      filepath.Join(base, "cache"),
+		ChatrDir:      base,
+		PackagesDir:   filepath.Join(base, "packages"),
+		BinDir:        filepath.Join(base, "bin"),
+		LibDir:        filepath.Join(base, "lib"),
+		AppsDir:       "/Applications",
+		FormulaeDir:   filepath.Join(base, "formulae"),
+		ManifestFile:  filepath.Join(base, "installed.json"),
+		StateDB:       filepath.Join(base, "state.db"),
+		MaxParallel:   6,
+		CellarDir:     filepath.Join(base, "Cellar"),
+		OptDir:        filepath.Join(base, "opt"),
+		IncludeDir:    filepath.Join(base, "include"),
+		ShareDir:      filepath.Join(base, "share"),
+		EtcDir:        filepath.Join(base, "etc"),
+		VarDir:        filepath.Join(base, "var"),
+		FrameworksDir: filepath.Join(base, "Frameworks"),
 	}
 
 	return cfg

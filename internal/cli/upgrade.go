@@ -105,6 +105,7 @@ func newUpgradeCmd() *cobra.Command {
 							DownloadURL: rp.Formula.URL,
 							SHA256:      rp.Formula.SHA256,
 							IsDep:       true,
+							KegOnly:     rp.Formula.KegOnly,
 						})
 						if err != nil {
 							mu.Lock()
@@ -160,7 +161,7 @@ func newUpgradeCmd() *cobra.Command {
 					upgraded = append(upgraded, fmt.Sprintf("%s %s%s%s → %s\n  %s %s\n  %s %s",
 						green("✓"), bold(pkg.Name), bold("-"), bold(oldVersion), bold(pkg.FullVersion()),
 						cyan("cache:"), filepath.Join(cfg.CacheDir, pkg.Name, pkg.FullVersion()),
-						cyan("path:"), filepath.Join(cfg.PackagesDir, pkg.Name, pkg.FullVersion())))
+						cyan("cellar:"), filepath.Join(cfg.CellarDir, pkg.Name, pkg.FullVersion())))
 					mu.Unlock()
 
 					return nil

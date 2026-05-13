@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/spf13/cobra"
@@ -84,11 +86,26 @@ func newListCmd() *cobra.Command {
 			fmt.Printf("%s\n", label)
 
 			for _, pkg := range packages {
-				line := fmt.Sprintf(" %s", bold(fmt.Sprintf("%s-%s", pkg.Name, pkg.FullVersion())))
+				displayName := pkg.Name
+				if i := strings.Index(displayName, "@"); i != -1 {
+					displayName = displayName[:i]
+				}
+				line := fmt.Sprintf(" %s", bold(fmt.Sprintf("%s-%s", displayName, pkg.FullVersion())))
+				if pkg.KegOnly {
+					line += fmt.Sprintf(" %s", dim("(keg-only)"))
+				}
 				if ver, ok := latest[pkg.Name]; ok && ver != pkg.Version {
 					line += fmt.Sprintf("  %s", yellow(fmt.Sprintf("↑ %s", ver)))
 				}
 				fmt.Println(line)
+				if pkg.IsCask {
+					for _, app := range pkg.Apps {
+						fmt.Printf("   %s %s\n", cyan("app:"), filepath.Join(cfg.AppsDir, app))
+					}
+				} else {
+					fmt.Printf("   %s %s\n", cyan("cellar:"), pkg.Path)
+					fmt.Printf("   %s %s\n", cyan("opt:"), filepath.Join(cfg.OptDir, pkg.Name))
+				}
 			}
 
 			return nil

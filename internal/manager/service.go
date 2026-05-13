@@ -4,25 +4,21 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/teamcutter/chatr/internal/domain"
+	"github.com/teamcutter/chatr/internal/linker"
 )
 
 type Manager struct {
-	fetcher     domain.Fetcher
-	cache       domain.Cache
-	extractor   domain.Extractor
-	state       domain.State
-	packagesDir string
-	binDir      string
-	libDir      string
-	appsDir     string
+	fetcher   domain.Fetcher
+	cache     domain.Cache
+	extractor domain.Extractor
+	state     domain.State
+	linker    *linker.Linker
+	appsDir   string
 }
 
 func New(
@@ -30,18 +26,16 @@ func New(
 	cache domain.Cache,
 	extractor domain.Extractor,
 	state domain.State,
-	packagesDir, binDir, libDir, appsDir string,
+	lnkr *linker.Linker,
+	appsDir string,
 ) *Manager {
-
 	return &Manager{
-		fetcher:     fetcher,
-		cache:       cache,
-		extractor:   extractor,
-		state:       state,
-		packagesDir: packagesDir,
-		binDir:      binDir,
-		libDir:      libDir,
-		appsDir:     appsDir,
+		fetcher:   fetcher,
+		cache:     cache,
+		extractor: extractor,
+		state:     state,
+		linker:    lnkr,
+		appsDir:   appsDir,
 	}
 }
 
@@ -66,7 +60,7 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		}
 	}
 
-	pkgPath := filepath.Join(m.packagesDir, pkg.Name, pkg.FullVersion)
+	pkgPath := m.linker.CellarPath(pkg.Name, pkg.FullVersion)
 
 	pendingPkg := &domain.InstalledPackage{
 		Name:        pkg.Name,
@@ -76,6 +70,7 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		Path:        pkgPath,
 		IsDep:       pkg.IsDep,
 		IsCask:      pkg.IsCask,
+		KegOnly:     pkg.KegOnly,
 		InstalledAt: time.Now(),
 	}
 
@@ -83,8 +78,6 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		return nil, fmt.Errorf("failed to begin install: %w", err)
 	}
 
-	var binaryNames []string
-	var libNames []string
 	var appNames []string
 
 	if pkg.IsCask {
@@ -94,29 +87,30 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		}
 		appNames = apps
 	} else {
-		// Ensure that if any previous installations
-		// failed, we extract into clear dir
 		os.RemoveAll(pkgPath)
 
-		if err := m.extractor.Extract(archivePath, m.packagesDir); err != nil {
+		if err := m.extractor.Extract(archivePath, m.linker.CellarPath("", "")); err != nil {
 			return nil, err
 		}
 
-		for _, libPath := range findLibraries(pkgPath) {
-			libName := filepath.Base(libPath)
-			m.createLibSymlink(libPath, libName)
-			patchRpath(libPath, m.libDir)
-			libNames = append(libNames, libName)
+		pkgPath = m.linker.CellarPath(pkg.Name, pkg.FullVersion)
+
+		if err := m.linker.Relocate(pkgPath, m.linker.PrefixPath()); err != nil {
 		}
 
-		for _, binPath := range findBinaries(pkgPath) {
-			binName := filepath.Base(binPath)
-			if err := m.createSymlink(binPath, binName); err != nil {
-				return nil, err
-			}
-			patchRpath(binPath, m.libDir)
-			binaryNames = append(binaryNames, binName)
+		if err := m.linker.CreateOptLink(pkg.Name, pkg.FullVersion); err != nil {
+			return nil, fmt.Errorf("failed to create opt link: %w", err)
 		}
+
+		var linkedDirs []string
+		var err error
+		if !pkg.KegOnly {
+			linkedDirs, err = m.linker.LinkToPrefix(pkg.Name, pkg.FullVersion)
+			if err != nil {
+				return nil, fmt.Errorf("failed to link to prefix: %w", err)
+			}
+		}
+		pendingPkg.LinkedDirs = linkedDirs
 	}
 
 	installedPkg := &domain.InstalledPackage{
@@ -125,11 +119,13 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		Revision:    pkg.Revision,
 		URL:         pkg.DownloadURL,
 		Path:        pkgPath,
-		Binaries:    binaryNames,
-		Libs:        libNames,
+		Binaries:    pendingPkg.Binaries,
+		Libs:        pendingPkg.Libs,
 		Apps:        appNames,
 		IsDep:       pkg.IsDep,
 		IsCask:      pkg.IsCask,
+		KegOnly:     pkg.KegOnly,
+		LinkedDirs:  pendingPkg.LinkedDirs,
 		InstalledAt: pendingPkg.InstalledAt,
 	}
 
@@ -154,17 +150,9 @@ func (m *Manager) Remove(ctx context.Context, pkg domain.Package) (*domain.Insta
 			}
 		}
 	} else {
-		for _, binName := range installedPkg.Binaries {
-			os.Remove(filepath.Join(m.binDir, binName))
-		}
-		for _, libName := range installedPkg.Libs {
-			os.Remove(filepath.Join(m.libDir, libName))
-		}
-	}
-
-	packageDir := filepath.Join(m.packagesDir, pkg.Name)
-	if err := os.RemoveAll(packageDir); err != nil {
-		return nil, err
+		m.linker.UnlinkFromPrefix(pkg.Name, installedPkg.LinkedDirs)
+		m.linker.RemoveOptLink(pkg.Name)
+		os.RemoveAll(m.linker.CellarPath(pkg.Name, ""))
 	}
 
 	if err := m.state.Remove(pkg.Name); err != nil {
@@ -228,7 +216,7 @@ func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPac
 		}
 	}
 
-	pkgPath := filepath.Join(m.packagesDir, newPackage.Name, newPackage.FullVersion)
+	pkgPath := m.linker.CellarPath(newPackage.Name, newPackage.FullVersion)
 
 	pendingPkg := &domain.InstalledPackage{
 		Name:         newPackage.Name,
@@ -239,6 +227,7 @@ func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPac
 		Dependencies: oldDeps,
 		IsDep:        newPackage.IsDep,
 		IsCask:       newPackage.IsCask,
+		KegOnly:      newPackage.KegOnly,
 		InstalledAt:  time.Now(),
 	}
 
@@ -253,18 +242,12 @@ func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPac
 				os.RemoveAll(appPath)
 			}
 		} else {
-			for _, binName := range oldInstalled.Binaries {
-				os.Remove(filepath.Join(m.binDir, binName))
-			}
-			for _, libName := range oldInstalled.Libs {
-				os.Remove(filepath.Join(m.libDir, libName))
-			}
+			m.linker.UnlinkFromPrefix(oldPackage.Name, oldInstalled.LinkedDirs)
+			m.linker.RemoveOptLink(oldPackage.Name)
+			os.RemoveAll(m.linker.CellarPath(oldPackage.Name, oldInstalled.FullVersion()))
 		}
-		os.RemoveAll(filepath.Join(m.packagesDir, oldPackage.Name))
 	}
 
-	var binaryNames []string
-	var libNames []string
 	var appNames []string
 
 	if newPackage.IsCask {
@@ -275,25 +258,29 @@ func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPac
 		appNames = apps
 	} else {
 		os.RemoveAll(pkgPath)
-		if err := m.extractor.Extract(archivePath, m.packagesDir); err != nil {
+
+		if err := m.extractor.Extract(archivePath, m.linker.CellarPath("", "")); err != nil {
 			return nil, err
 		}
 
-		for _, libPath := range findLibraries(pkgPath) {
-			libName := filepath.Base(libPath)
-			m.createLibSymlink(libPath, libName)
-			patchRpath(libPath, m.libDir)
-			libNames = append(libNames, libName)
+		pkgPath = m.linker.CellarPath(newPackage.Name, newPackage.FullVersion)
+
+		if err := m.linker.Relocate(pkgPath, m.linker.PrefixPath()); err != nil {
 		}
 
-		for _, binPath := range findBinaries(pkgPath) {
-			binName := filepath.Base(binPath)
-			if err := m.createSymlink(binPath, binName); err != nil {
-				return nil, err
-			}
-			patchRpath(binPath, m.libDir)
-			binaryNames = append(binaryNames, binName)
+		if err := m.linker.CreateOptLink(newPackage.Name, newPackage.FullVersion); err != nil {
+			return nil, fmt.Errorf("failed to create opt link: %w", err)
 		}
+
+		var linkedDirs []string
+		var err error
+		if !newPackage.KegOnly {
+			linkedDirs, err = m.linker.LinkToPrefix(newPackage.Name, newPackage.FullVersion)
+			if err != nil {
+				return nil, fmt.Errorf("failed to link to prefix: %w", err)
+			}
+		}
+		pendingPkg.LinkedDirs = linkedDirs
 	}
 
 	installedPkg := &domain.InstalledPackage{
@@ -302,12 +289,14 @@ func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPac
 		Revision:     newPackage.Revision,
 		URL:          newPackage.DownloadURL,
 		Path:         pkgPath,
-		Binaries:     binaryNames,
-		Libs:         libNames,
+		Binaries:     pendingPkg.Binaries,
+		Libs:         pendingPkg.Libs,
 		Apps:         appNames,
 		Dependencies: oldDeps,
 		IsDep:        newPackage.IsDep,
 		IsCask:       newPackage.IsCask,
+		KegOnly:      newPackage.KegOnly,
+		LinkedDirs:   pendingPkg.LinkedDirs,
 		InstalledAt:  pendingPkg.InstalledAt,
 	}
 
@@ -320,6 +309,10 @@ func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPac
 
 func (m *Manager) ListInstalled() (map[string]*domain.InstalledPackage, error) {
 	return m.state.ListInstalled()
+}
+
+func (m *Manager) IsInstalled(name string) (bool, *domain.InstalledPackage, error) {
+	return m.state.IsInstalled(name)
 }
 
 func (m *Manager) Reconcile() []string {
@@ -351,158 +344,4 @@ func (m *Manager) Flush() error {
 
 func (m *Manager) Clear(ctx context.Context) error {
 	return m.cache.Clear()
-}
-
-func (m *Manager) createSymlink(path, binName string) error {
-	if err := os.MkdirAll(m.binDir, 0755); err != nil {
-		return fmt.Errorf("failed to create bin directory: %w", err)
-	}
-
-	linkPath := filepath.Join(m.binDir, binName)
-
-	if _, err := os.Lstat(linkPath); err == nil {
-		os.Remove(linkPath)
-	}
-
-	return os.Symlink(path, linkPath)
-}
-
-func (m *Manager) createLibSymlink(src, libName string) {
-	os.MkdirAll(m.libDir, 0755)
-
-	linkPath := filepath.Join(m.libDir, libName)
-	if _, err := os.Lstat(linkPath); err == nil {
-		os.Remove(linkPath)
-	}
-
-	os.Symlink(src, linkPath)
-}
-
-func patchRpath(path, libDir string) {
-	switch runtime.GOOS {
-	case "darwin":
-		patchDarwin(path, libDir)
-	case "linux":
-		patchLinux(path, libDir)
-	}
-}
-
-func patchLinux(path, libDir string) {
-	if _, err := exec.LookPath("patchelf"); err != nil {
-		fmt.Fprintln(os.Stderr, "warning: patchelf not found, binaries may not work (install with: apt install patchelf / dnf install patchelf)")
-		return
-	}
-	interp := findSystemInterpreter()
-	if interp != "" {
-		exec.Command("patchelf", "--set-interpreter", interp, path).Run()
-	}
-	exec.Command("patchelf", "--set-rpath", libDir, path).Run()
-}
-
-func findSystemInterpreter() string {
-	out, err := exec.Command("patchelf", "--print-interpreter", "/bin/sh").Output()
-	if err == nil {
-		if interp := strings.TrimSpace(string(out)); interp != "" {
-			return interp
-		}
-	}
-	return ""
-}
-
-func patchDarwin(path, libDir string) {
-	out, err := exec.Command("otool", "-L", path).Output()
-	if err != nil {
-		return
-	}
-
-	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.Contains(line, " (compatibility") {
-			continue
-		}
-		libRef := strings.TrimSpace(strings.Split(line, " (compatibility")[0])
-
-		if strings.HasPrefix(libRef, "/usr/lib/") ||
-			strings.HasPrefix(libRef, "/System/") ||
-			strings.HasPrefix(libRef, "@rpath/") ||
-			strings.HasPrefix(libRef, "@loader_path/") ||
-			strings.HasPrefix(libRef, "@executable_path/") {
-			continue
-		}
-
-		newRef := "@rpath/" + filepath.Base(libRef)
-		exec.Command("install_name_tool", "-change", libRef, newRef, path).Run()
-	}
-
-	exec.Command("install_name_tool", "-add_rpath", libDir, path).Run()
-	exec.Command("codesign", "--force", "--sign", "-", path).Run()
-}
-
-func findLibraries(dir string) []string {
-	libDir := filepath.Join(dir, "lib")
-	entries, err := os.ReadDir(libDir)
-	if err != nil {
-		return nil
-	}
-
-	var libs []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if strings.HasSuffix(name, ".dylib") || strings.HasSuffix(name, ".so") || strings.Contains(name, ".so.") {
-			libs = append(libs, filepath.Join(libDir, name))
-		}
-	}
-	return libs
-}
-
-func findBinaries(dir string) []string {
-	candidates := []string{
-		filepath.Join(dir, "bin"),
-		filepath.Join(dir, "libexec", "bin"),
-		filepath.Join(dir, "libexec"),
-	}
-
-	for _, binPath := range candidates {
-		if executables := findExecutablesIn(binPath); len(executables) > 0 {
-			return executables
-		}
-	}
-
-	return nil
-}
-
-func findExecutablesIn(binPath string) []string {
-	entries, err := os.ReadDir(binPath)
-	if err != nil {
-		return nil
-	}
-
-	var executables []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-
-		name := e.Name()
-		if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(name), ".exe") {
-			continue
-		}
-
-		fullPath := filepath.Join(binPath, name)
-		info, err := os.Stat(fullPath)
-		if err != nil {
-			continue
-		}
-
-		if runtime.GOOS != "windows" && info.Mode()&0111 == 0 {
-			continue
-		}
-
-		executables = append(executables, fullPath)
-	}
-
-	return executables
 }

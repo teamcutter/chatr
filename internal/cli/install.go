@@ -107,6 +107,7 @@ func newInstallCmd() *cobra.Command {
 						SHA256:      checksum,
 						IsDep:       rp.IsDep,
 						IsCask:      formula.IsCask,
+						KegOnly:     formula.KegOnly,
 					})
 					if err != nil {
 						outMu.Lock()
@@ -135,11 +136,15 @@ func newInstallCmd() *cobra.Command {
 							lines += fmt.Sprintf("\n  %s %s", cyan("app:"), filepath.Join(cfg.AppsDir, app))
 						}
 						output[formula.Name] = lines
+					} else if formula.KegOnly {
+						output[formula.Name] = fmt.Sprintf("%s %s%s%s %s\n  %s %s",
+							green("✓"), bold(pkg.Name), bold("-"), bold(pkg.FullVersion()),
+							dim("(keg-only)"), cyan("opt:"), filepath.Join(cfg.OptDir, pkg.Name))
 					} else {
 						output[formula.Name] = fmt.Sprintf("%s %s%s%s\n  %s %s\n  %s %s",
 							green("✓"), bold(pkg.Name), bold("-"), bold(pkg.FullVersion()),
-							cyan("cache:"), filepath.Join(cfg.CacheDir, pkg.Name, pkg.FullVersion()),
-							cyan("path:"), filepath.Join(cfg.PackagesDir, pkg.Name, pkg.FullVersion()))
+							cyan("cellar:"), filepath.Join(cfg.CellarDir, pkg.Name, pkg.FullVersion()),
+							cyan("opt:"), filepath.Join(cfg.OptDir, pkg.Name))
 					}
 					outMu.Unlock()
 					return nil

@@ -11,6 +11,7 @@ type Package struct {
 	SHA256      string
 	IsDep       bool
 	IsCask      bool
+	KegOnly     bool
 }
 
 type FetchResult struct {
@@ -32,6 +33,8 @@ type InstalledPackage struct {
 	Dependencies []string  `json:"dependencies,omitempty"`
 	IsDep        bool      `json:"is_dep,omitempty"`
 	IsCask       bool      `json:"is_cask,omitempty"`
+	KegOnly      bool      `json:"keg_only,omitempty"`
+	LinkedDirs   []string  `json:"linked_dirs,omitempty"`
 	InstalledAt  time.Time `json:"installed_at"`
 }
 
@@ -58,6 +61,8 @@ type Formula struct {
 	Dependencies []string
 	IsCask       bool
 	Apps         []string
+	KegOnly      bool
+	Cellar       string
 }
 
 func (f Formula) FullVersion() string {

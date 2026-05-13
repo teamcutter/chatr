@@ -51,10 +51,12 @@ type Formulae struct {
 			Files map[string]struct {
 				URL    string `json:"url"`
 				SHA256 string `json:"sha256"`
+				Cellar string `json:"cellar"`
 			} `json:"files"`
 		} `json:"stable"`
 	} `json:"bottle"`
 	Dependencies []string `json:"dependencies"`
+	KegOnly      bool     `json:"keg_only"`
 }
 
 func New(formulaeDir string) *HomebrewRegistry {
@@ -264,12 +266,13 @@ func (h *HomebrewRegistry) Update(ctx context.Context) (int, error) {
 }
 
 func (h *HomebrewRegistry) toFormula(f *Formulae) *domain.Formula {
-	var url, sha256 string
+	var url, sha256, cellar string
 
 	for _, p := range getPlatformCandidates() {
 		if file, ok := f.Bottle.Stable.Files[p]; ok {
 			url = file.URL
 			sha256 = file.SHA256
+			cellar = file.Cellar
 			break
 		}
 	}
@@ -288,6 +291,8 @@ func (h *HomebrewRegistry) toFormula(f *Formulae) *domain.Formula {
 		URL:          url,
 		SHA256:       sha256,
 		Dependencies: f.Dependencies,
+		KegOnly:      f.KegOnly,
+		Cellar:       cellar,
 	}
 }
 

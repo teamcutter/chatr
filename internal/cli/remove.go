@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/teamcutter/chatr/internal/domain"
@@ -54,7 +55,11 @@ func newRemoveCmd() *cobra.Command {
 					failed++
 					continue
 				}
-				fmt.Printf("%s %s%s%s removed (with %s dependencies)\n", green("✓"), bold(removedPackage.Name), bold("-"), bold(removedPackage.FullVersion()), green(len(removedPackage.Dependencies)))
+				displayName := removedPackage.Name
+				if i := strings.Index(displayName, "@"); i != -1 {
+					displayName = displayName[:i]
+				}
+				fmt.Printf("%s %s%s%s removed (with %s dependencies)\n", green("✓"), bold(displayName), bold("-"), bold(removedPackage.FullVersion()), green(len(removedPackage.Dependencies)))
 			}
 
 			if err := mgr.Flush(); err != nil {
