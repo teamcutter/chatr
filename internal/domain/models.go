@@ -12,6 +12,7 @@ type Package struct {
 	IsDep       bool
 	IsCask      bool
 	KegOnly     bool
+	Cellar      string
 }
 
 type FetchResult struct {

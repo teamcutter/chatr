@@ -108,6 +108,7 @@ func newInstallCmd() *cobra.Command {
 						IsDep:       rp.IsDep,
 						IsCask:      formula.IsCask,
 						KegOnly:     formula.KegOnly,
+						Cellar:      formula.Cellar,
 					})
 					if err != nil {
 						outMu.Lock()

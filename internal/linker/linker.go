@@ -3,11 +3,13 @@ package linker
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 )
 
 type Linker struct {
@@ -171,9 +173,122 @@ func (l *Linker) Relocate(pkgPath, chatrPrefix string) error {
 
 	binPath := filepath.Join(pkgPath, "bin")
 	l.walkAndReplace(binPath, placeholders, cellarPrefixes, homebrewPrefixes, chatrPrefix, chatrCellar)
+	l.patchBinaryStrings(pkgPath, cellarPrefixes, homebrewPrefixes, chatrPrefix)
 	l.patchRpath(pkgPath)
 
 	return nil
+}
+
+func (l *Linker) patchBinaryStrings(pkgPath string, cellarPrefixes, homebrewPrefixes []string, chatrPrefix string) {
+	chatrOpt := filepath.Join(chatrPrefix, "opt")
+
+	filepath.WalkDir(pkgPath, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil || len(content) == 0 {
+			return nil
+		}
+
+		if !bytes.Contains(content[:min(512, len(content))], []byte{0x00}) {
+			return nil
+		}
+
+		modified := false
+
+		// Rewrite Cellar paths in binaries to use opt symlinks (version-agnostic).
+		// e.g. /opt/homebrew/Cellar/python@3.11/3.11.15_1/Frameworks/... → ~/.chatr/opt/python@3.11/Frameworks/...
+		// The opt symlink resolves the version, so it doesn't need to be in the path.
+		// New path is null-padded to preserve the original string length in the binary.
+		for _, cellarPrefix := range cellarPrefixes {
+			prefix := []byte(cellarPrefix + "/")
+			for {
+				idx := bytes.Index(content, prefix)
+				if idx < 0 {
+					break
+				}
+
+				end := idx
+				for end < len(content) && content[end] != 0x00 {
+					end++
+				}
+
+				oldPath := string(content[idx:end])
+				remainder := oldPath[len(cellarPrefix)+1:]
+				parts := strings.SplitN(remainder, "/", 2)
+				if len(parts) == 0 {
+					break
+				}
+
+				pkgName := parts[0]
+				var newPath string
+				if len(parts) > 1 {
+					versionAndRest := parts[1]
+					restParts := strings.SplitN(versionAndRest, "/", 2)
+					if len(restParts) > 1 {
+						newPath = chatrOpt + "/" + pkgName + "/" + restParts[1]
+					} else {
+						newPath = chatrOpt + "/" + pkgName
+					}
+				} else {
+					newPath = chatrOpt + "/" + pkgName
+				}
+
+				if len(newPath) > len(oldPath) {
+					break
+				}
+
+				replacement := make([]byte, end-idx)
+				copy(replacement, []byte(newPath))
+				copy(content[idx:end], replacement)
+				modified = true
+			}
+		}
+
+		// Rewrite Homebrew prefix paths to chatr prefix.
+		// e.g. /opt/homebrew/lib/libz.dylib → ~/.chatr/lib/libz.dylib
+		// Only possible when chatr prefix is shorter or equal length.
+		for _, homebrewPrefix := range homebrewPrefixes {
+			if len(chatrPrefix) > len(homebrewPrefix) {
+				continue
+			}
+			old := []byte(homebrewPrefix)
+			for {
+				idx := bytes.Index(content, old)
+				if idx < 0 {
+					break
+				}
+
+				end := idx
+				for end < len(content) && content[end] != 0x00 {
+					end++
+				}
+
+				oldStr := content[idx:end]
+				newPath := chatrPrefix + string(oldStr[len(homebrewPrefix):])
+				if len(newPath) > len(oldStr) {
+					break
+				}
+
+				replacement := make([]byte, len(oldStr))
+				copy(replacement, []byte(newPath))
+				copy(content[idx:end], replacement)
+				modified = true
+			}
+		}
+
+		if modified {
+			info, err := os.Stat(path)
+			if err != nil {
+				return nil
+			}
+			os.WriteFile(path, content, info.Mode())
+		}
+
+		return nil
+	})
 }
 
 func (l *Linker) walkAndReplace(dirPath string, placeholders map[string]string, cellarPrefixes, homebrewPrefixes []string, chatrPrefix, chatrCellar string) error {
@@ -181,66 +296,62 @@ func (l *Linker) walkAndReplace(dirPath string, placeholders map[string]string, 
 		if err != nil || d.IsDir() {
 			return nil
 		}
-
-		if !l.isTextFile(path) {
-			return nil
-		}
-
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return nil
-		}
-
-		modified := false
-		str := string(content)
-
-		for placeholder, replacement := range placeholders {
-			if strings.Contains(str, placeholder) {
-				str = strings.ReplaceAll(str, placeholder, replacement)
-				modified = true
-			}
-		}
-
-		for _, cellarPrefix := range cellarPrefixes {
-			if strings.Contains(str, cellarPrefix) {
-				str = strings.ReplaceAll(str, cellarPrefix, chatrCellar)
-				modified = true
-			}
-		}
-
-		for _, homebrewPrefix := range homebrewPrefixes {
-			if strings.Contains(str, homebrewPrefix) {
-				str = strings.ReplaceAll(str, homebrewPrefix, chatrPrefix)
-				modified = true
-			}
-		}
-
-		if modified {
-			os.WriteFile(path, []byte(str), 0644)
-		}
-
+		l.relocateFile(path, placeholders, cellarPrefixes, homebrewPrefixes, chatrPrefix, chatrCellar)
 		return nil
 	})
 }
 
-func (l *Linker) isTextFile(path string) bool {
-	file, err := os.Open(path)
+func (l *Linker) relocateFile(path string, placeholders map[string]string, cellarPrefixes, homebrewPrefixes []string, chatrPrefix, chatrCellar string) {
+	f, err := os.Open(path)
 	if err != nil {
-		return false
+		return
 	}
-	defer file.Close()
+	defer f.Close()
 
-	buffer := make([]byte, 512)
-	n, _ := file.Read(buffer)
-	if n == 0 {
-		return false
-	}
-
-	if bytes.Contains(buffer[:n], []byte{0x00}) {
-		return false
+	info, err := f.Stat()
+	if err != nil {
+		return
 	}
 
-	return true
+	header := make([]byte, 512)
+	n, _ := f.Read(header)
+	if n == 0 || bytes.Contains(header[:n], []byte{0x00}) {
+		return
+	}
+
+	f.Seek(0, io.SeekStart)
+	content, err := io.ReadAll(f)
+	if err != nil || len(content) == 0 {
+		return
+	}
+
+	modified := false
+	str := string(content)
+
+	for placeholder, replacement := range placeholders {
+		if strings.Contains(str, placeholder) {
+			str = strings.ReplaceAll(str, placeholder, replacement)
+			modified = true
+		}
+	}
+
+	for _, cellarPrefix := range cellarPrefixes {
+		if strings.Contains(str, cellarPrefix) {
+			str = strings.ReplaceAll(str, cellarPrefix, chatrCellar)
+			modified = true
+		}
+	}
+
+	for _, homebrewPrefix := range homebrewPrefixes {
+		if strings.Contains(str, homebrewPrefix) {
+			str = strings.ReplaceAll(str, homebrewPrefix, chatrPrefix)
+			modified = true
+		}
+	}
+
+	if modified {
+		os.WriteFile(path, []byte(str), info.Mode())
+	}
 }
 
 func (l *Linker) patchRpath(pkgPath string) error {
@@ -301,12 +412,20 @@ func (l *Linker) patchDarwin(pkgPath string) error {
 		return nil
 	})
 
-	// Collect rpaths: prefix lib + package's own lib + framework version dirs
 	rpaths := l.collectRpaths(pkgPath)
 
+	sem := make(chan struct{}, runtime.NumCPU())
+	var wg sync.WaitGroup
 	for _, path := range binPaths {
-		l.patchDarwinBinary(path, rpaths)
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			l.patchDarwinBinary(path, rpaths)
+		}()
 	}
+	wg.Wait()
 
 	return nil
 }
@@ -325,7 +444,6 @@ func (l *Linker) collectRpaths(pkgPath string) []string {
 	// Prefix lib (for dependencies linked to prefix)
 	add(l.prefixDirs["lib"])
 
-	// Package's own lib
 	pkgLib := filepath.Join(pkgPath, "lib")
 	if _, err := os.Stat(pkgLib); err == nil {
 		add(pkgLib)
@@ -363,6 +481,7 @@ func (l *Linker) patchDarwinBinary(path string, rpaths []string) error {
 		return err
 	}
 
+	var changeArgs []string
 	for _, line := range strings.Split(string(out), "\n") {
 		line = strings.TrimSpace(line)
 		if !strings.Contains(line, " (compatibility") {
@@ -379,14 +498,20 @@ func (l *Linker) patchDarwinBinary(path string, rpaths []string) error {
 		}
 
 		newRef := "@rpath/" + filepath.Base(libRef)
-		exec.Command("install_name_tool", "-change", libRef, newRef, path).Run()
+		changeArgs = append(changeArgs, "-change", libRef, newRef)
 	}
 
+	var args []string
+	args = append(args, changeArgs...)
 	for _, rpath := range rpaths {
-		exec.Command("install_name_tool", "-add_rpath", rpath, path).Run()
+		args = append(args, "-add_rpath", rpath)
 	}
 
-	exec.Command("codesign", "--force", "--sign", "-", path).Run()
+	if len(args) > 0 {
+		args = append(args, path)
+		exec.Command("install_name_tool", args...).Run()
+		exec.Command("codesign", "--force", "--sign", "-", path).Run()
+	}
 
 	return nil
 }

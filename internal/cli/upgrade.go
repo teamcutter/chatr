@@ -106,6 +106,7 @@ func newUpgradeCmd() *cobra.Command {
 							SHA256:      rp.Formula.SHA256,
 							IsDep:       true,
 							KegOnly:     rp.Formula.KegOnly,
+							Cellar:      rp.Formula.Cellar,
 						})
 						if err != nil {
 							mu.Lock()
@@ -145,6 +146,8 @@ func newUpgradeCmd() *cobra.Command {
 						DownloadURL: rootFormula.URL,
 						SHA256:      rootFormula.SHA256,
 						IsCask:      rootFormula.IsCask,
+						KegOnly:     rootFormula.KegOnly,
+						Cellar:      rootFormula.Cellar,
 					})
 					if err != nil {
 						mu.Lock()
