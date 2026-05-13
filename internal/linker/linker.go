@@ -449,6 +449,18 @@ func (l *Linker) collectRpaths(pkgPath string) []string {
 		add(pkgLib)
 	}
 
+	// Keg-only dependencies (zlib, openssl, etc.) don't link into prefix lib.
+	// Add their opt lib dirs so binaries can find them at runtime.
+	optEntries, err := os.ReadDir(l.optDir)
+	if err == nil {
+		for _, entry := range optEntries {
+			optLib := filepath.Join(l.optDir, entry.Name(), "lib")
+			if _, err := os.Stat(optLib); err == nil {
+				add(optLib)
+			}
+		}
+	}
+
 	// Framework version dirs (e.g., Frameworks/Python.framework/Versions/3.12/)
 	frameworksDir := filepath.Join(pkgPath, "Frameworks")
 	entries, err := os.ReadDir(frameworksDir)
