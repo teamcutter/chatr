@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -21,6 +22,24 @@ func NewTAR() *TARExtractor {
 }
 
 func (te *TARExtractor) Extract(src, dst string) error {
+	if _, err := exec.LookPath("tar"); err == nil {
+		return te.extractSystem(src, dst)
+	}
+	return te.extractGo(src, dst)
+}
+
+func (te *TARExtractor) extractSystem(src, dst string) error {
+	if err := os.MkdirAll(dst, 0755); err != nil {
+		return err
+	}
+	out, err := exec.Command("tar", "-xf", src, "-C", dst).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("tar extraction failed: %w: %s", err, out)
+	}
+	return nil
+}
+
+func (te *TARExtractor) extractGo(src, dst string) error {
 	file, err := os.Open(src)
 	if err != nil {
 		return err

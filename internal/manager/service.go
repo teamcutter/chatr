@@ -95,7 +95,8 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 
 		pkgPath = m.linker.CellarPath(pkg.Name, pkg.FullVersion)
 
-		if err := m.linker.Relocate(pkgPath, m.linker.PrefixPath()); err != nil {
+		if pkg.Cellar != ":any_skip_relocation" {
+			m.linker.Relocate(pkgPath, m.linker.PrefixPath())
 		}
 
 		if err := m.linker.CreateOptLink(pkg.Name, pkg.FullVersion); err != nil {
@@ -265,7 +266,8 @@ func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPac
 
 		pkgPath = m.linker.CellarPath(newPackage.Name, newPackage.FullVersion)
 
-		if err := m.linker.Relocate(pkgPath, m.linker.PrefixPath()); err != nil {
+		if newPackage.Cellar != ":any_skip_relocation" {
+			m.linker.Relocate(pkgPath, m.linker.PrefixPath())
 		}
 
 		if err := m.linker.CreateOptLink(newPackage.Name, newPackage.FullVersion); err != nil {
