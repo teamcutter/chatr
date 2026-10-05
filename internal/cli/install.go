@@ -15,6 +15,7 @@ import (
 func newInstallCmd() *cobra.Command {
 	var sha256 string
 	var cask bool
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:   "install <name>...",
@@ -109,6 +110,8 @@ func newInstallCmd() *cobra.Command {
 						IsCask:      formula.IsCask,
 						KegOnly:     formula.KegOnly,
 						Cellar:      formula.Cellar,
+						Apps:        formula.Apps,
+						Force:       force,
 					})
 					if err != nil {
 						outMu.Lock()
@@ -183,5 +186,6 @@ func newInstallCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&sha256, "sha256", "", "Expected SHA256 checksum")
 	cmd.Flags().BoolVar(&cask, "cask", false, "Install a cask (macOS application)")
+	cmd.Flags().BoolVar(&force, "force", false, "Replace an existing app bundle that was not installed by chatr")
 	return cmd
 }
