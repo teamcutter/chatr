@@ -343,7 +343,3 @@ func (m *Manager) Reconcile() []string {
 func (m *Manager) Flush() error {
 	return m.state.Flush()
 }
-
-func (m *Manager) Clear(ctx context.Context) error {
-	return m.cache.Clear()
-}

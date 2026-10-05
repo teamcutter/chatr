@@ -47,10 +47,6 @@ type Manifest struct {
 	Packages map[string]*InstalledPackage `json:"packages"`
 }
 
-func NewManifest() *Manifest {
-	return &Manifest{Packages: make(map[string]*InstalledPackage)}
-}
-
 type Formula struct {
 	Name         string
 	Description  string

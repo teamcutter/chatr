@@ -582,10 +582,6 @@ func (l *Linker) CellarPath(name, version string) string {
 	return filepath.Join(l.cellarDir, name, version)
 }
 
-func (l *Linker) OptPath(name string) string {
-	return filepath.Join(l.optDir, name)
-}
-
 func (l *Linker) PrefixPath() string {
 	return filepath.Dir(l.optDir)
 }
