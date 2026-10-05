@@ -68,7 +68,7 @@ func (c *CaskRegistry) loadIndex(ctx context.Context) error {
 		if cached, ok := c.getFromCached(10 * time.Minute); ok {
 			index, err := c.decodeIndex(bytes.NewReader(cached))
 			if err == nil {
-				c.index = index
+				c.setIndex(index)
 				return
 			}
 		}
@@ -102,10 +102,28 @@ func (c *CaskRegistry) loadIndex(ctx context.Context) error {
 			return
 		}
 
-		c.index = index
+		c.setIndex(index)
 		_ = c.storeToCache(buf.Bytes())
 	})
 	return c.indexErr
+}
+
+func (c *CaskRegistry) setIndex(index map[string]*Cask) {
+	c.Lock()
+	c.index = index
+	c.Unlock()
+}
+
+// snapshot returns the current index entries. The slice stays valid after the
+// lock is released because the index map is replaced, never mutated in place.
+func (c *CaskRegistry) snapshot() []*Cask {
+	c.RLock()
+	defer c.RUnlock()
+	casks := make([]*Cask, 0, len(c.index))
+	for _, cask := range c.index {
+		casks = append(casks, cask)
+	}
+	return casks
 }
 
 func (c *CaskRegistry) Get(ctx context.Context, name string) (*domain.Formula, error) {
@@ -113,7 +131,10 @@ func (c *CaskRegistry) Get(ctx context.Context, name string) (*domain.Formula, e
 		return nil, err
 	}
 
-	if cask, ok := c.index[name]; ok {
+	c.RLock()
+	cask, ok := c.index[name]
+	c.RUnlock()
+	if ok {
 		return toFormulaCask(cask), nil
 	}
 
@@ -125,12 +146,7 @@ func (c *CaskRegistry) Search(ctx context.Context, query string) ([]domain.Formu
 		return nil, err
 	}
 
-	casks := make([]Cask, 0, len(c.index))
-	for _, cask := range c.index {
-		casks = append(casks, *cask)
-	}
-
-	return filterAndSortCasks(casks, query), nil
+	return filterAndSortCasks(c.snapshot(), query), nil
 }
 
 func (c *CaskRegistry) GetVersion(ctx context.Context, name string) (string, error) {
@@ -201,7 +217,7 @@ func (c *CaskRegistry) Update(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("decoding response: %w", err)
 	}
 
-	c.index = index
+	c.setIndex(index)
 	if err := c.storeToCache(buf.Bytes()); err != nil {
 		return 0, fmt.Errorf("storing cache: %w", err)
 	}
@@ -209,13 +225,13 @@ func (c *CaskRegistry) Update(ctx context.Context) (int, error) {
 	return len(index), nil
 }
 
-func filterAndSortCasks(casks []Cask, query string) []domain.Formula {
+func filterAndSortCasks(casks []*Cask, query string) []domain.Formula {
 	query = strings.ToLower(query)
 	var results []domain.Formula
 	for _, c := range casks {
 		if strings.Contains(strings.ToLower(c.Token), query) ||
 			strings.Contains(strings.ToLower(c.Desc), query) {
-			results = append(results, *toFormulaCask(&c))
+			results = append(results, *toFormulaCask(c))
 		}
 	}
 

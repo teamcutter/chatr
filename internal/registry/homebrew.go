@@ -90,7 +90,7 @@ func (h *HomebrewRegistry) loadIndex(ctx context.Context) error {
 		if cached, ok := h.getFromCached(10 * time.Minute); ok {
 			index, err := h.decodeIndex(bytes.NewReader(cached))
 			if err == nil {
-				h.index = index
+				h.setIndex(index)
 				return
 			}
 		}
@@ -124,10 +124,28 @@ func (h *HomebrewRegistry) loadIndex(ctx context.Context) error {
 			return
 		}
 
-		h.index = index
+		h.setIndex(index)
 		_ = h.storeToCache(buf.Bytes())
 	})
 	return h.indexErr
+}
+
+func (h *HomebrewRegistry) setIndex(index map[string]*Formulae) {
+	h.Lock()
+	h.index = index
+	h.Unlock()
+}
+
+// snapshot returns the current index entries. The slice stays valid after the
+// lock is released because the index map is replaced, never mutated in place.
+func (h *HomebrewRegistry) snapshot() []*Formulae {
+	h.RLock()
+	defer h.RUnlock()
+	formulae := make([]*Formulae, 0, len(h.index))
+	for _, f := range h.index {
+		formulae = append(formulae, f)
+	}
+	return formulae
 }
 
 func (h *HomebrewRegistry) Get(ctx context.Context, name string) (*domain.Formula, error) {
@@ -135,7 +153,10 @@ func (h *HomebrewRegistry) Get(ctx context.Context, name string) (*domain.Formul
 		return nil, err
 	}
 
-	if f, ok := h.index[name]; ok {
+	h.RLock()
+	f, ok := h.index[name]
+	h.RUnlock()
+	if ok {
 		return h.toFormula(f), nil
 	}
 
@@ -147,12 +168,7 @@ func (h *HomebrewRegistry) Search(ctx context.Context, query string) ([]domain.F
 		return nil, err
 	}
 
-	formulae := make([]Formulae, 0, len(h.index))
-	for _, f := range h.index {
-		formulae = append(formulae, *f)
-	}
-
-	return h.filterAndSort(formulae, query), nil
+	return h.filterAndSort(h.snapshot(), query), nil
 }
 
 func (h *HomebrewRegistry) GetVersion(ctx context.Context, name string) (string, error) {
@@ -164,13 +180,13 @@ func (h *HomebrewRegistry) GetVersion(ctx context.Context, name string) (string,
 	return formula.Version, nil
 }
 
-func (h *HomebrewRegistry) filterAndSort(formulae []Formulae, query string) []domain.Formula {
+func (h *HomebrewRegistry) filterAndSort(formulae []*Formulae, query string) []domain.Formula {
 	query = strings.ToLower(query)
 	var results []domain.Formula
 	for _, f := range formulae {
 		if strings.Contains(strings.ToLower(f.Name), query) ||
 			strings.Contains(strings.ToLower(f.Desc), query) {
-			results = append(results, *h.toFormula(&f))
+			results = append(results, *h.toFormula(f))
 		}
 	}
 
@@ -257,7 +273,7 @@ func (h *HomebrewRegistry) Update(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("decoding response: %w", err)
 	}
 
-	h.index = index
+	h.setIndex(index)
 	if err := h.storeToCache(buf.Bytes()); err != nil {
 		return 0, fmt.Errorf("storing cache: %w", err)
 	}
