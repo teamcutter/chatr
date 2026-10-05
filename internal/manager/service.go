@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -137,37 +138,59 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 	return installedPkg, nil
 }
 
+// Remove uninstalls a package and any dependencies that nothing else needs.
+// The state row is deleted before any files so that a failure part-way
+// through leaves stray files (which a reinstall overwrites) rather than a
+// ghost entry that blocks reinstalling.
 func (m *Manager) Remove(ctx context.Context, pkg domain.Package) (*domain.InstalledPackage, error) {
-	installed, installedPkg, _ := m.state.IsInstalled(pkg.Name)
+	installed, installedPkg, err := m.state.IsInstalled(pkg.Name)
+	if err != nil {
+		return nil, err
+	}
 	if !installed {
 		return nil, fmt.Errorf("package %s is not installed", pkg.Name)
 	}
 
+	if err := m.state.Remove(pkg.Name); err != nil {
+		return nil, fmt.Errorf("failed to update state: %w", err)
+	}
+
+	var errs []error
+
 	if installedPkg.IsCask {
 		for _, appName := range installedPkg.Apps {
-			appPath := filepath.Join(m.appsDir, appName)
-			if err := os.RemoveAll(appPath); err != nil {
-				return nil, fmt.Errorf("failed to remove app %s: %w", appName, err)
+			if appName == "" || filepath.Base(appName) != appName {
+				continue
+			}
+			if err := os.RemoveAll(filepath.Join(m.appsDir, appName)); err != nil {
+				errs = append(errs, fmt.Errorf("failed to remove app %s: %w", appName, err))
 			}
 		}
 	} else {
-		m.linker.UnlinkFromPrefix(pkg.Name, installedPkg.LinkedDirs)
-		m.linker.RemoveOptLink(pkg.Name)
-		os.RemoveAll(m.linker.CellarPath(pkg.Name, ""))
-	}
-
-	if err := m.state.Remove(pkg.Name); err != nil {
-		return nil, err
+		if err := m.linker.UnlinkFromPrefix(pkg.Name, installedPkg.LinkedDirs); err != nil {
+			errs = append(errs, fmt.Errorf("failed to unlink %s: %w", pkg.Name, err))
+		}
+		if err := m.linker.RemoveOptLink(pkg.Name); err != nil {
+			errs = append(errs, fmt.Errorf("failed to remove opt link for %s: %w", pkg.Name, err))
+		}
+		if err := os.RemoveAll(m.linker.CellarPath(pkg.Name, "")); err != nil {
+			errs = append(errs, fmt.Errorf("failed to remove %s from cellar: %w", pkg.Name, err))
+		}
 	}
 
 	for _, dep := range installedPkg.Dependencies {
+		if depInstalled, _, _ := m.state.IsInstalled(dep); !depInstalled {
+			continue
+		}
 		if m.isDependencyOf(dep, pkg.Name) {
 			continue
 		}
-		m.Remove(ctx, domain.Package{Name: dep})
+		if _, err := m.Remove(ctx, domain.Package{Name: dep}); err != nil {
+			errs = append(errs, fmt.Errorf("dependency %s: %w", dep, err))
+		}
 	}
 
-	return installedPkg, nil
+	return installedPkg, errors.Join(errs...)
 }
 
 func (m *Manager) isDependencyOf(dep, excludeName string) bool {
