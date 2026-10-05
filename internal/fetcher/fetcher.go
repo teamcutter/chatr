@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -22,6 +23,12 @@ type HTTPFetcher struct {
 	client    *http.Client
 	outputDir string
 	timeout   time.Duration
+	// warn receives human-readable notices such as "checksum skipped".
+	warn io.Writer
+	// retries is the number of additional attempts for transient failures.
+	retries int
+	// backoff is the base delay between attempts; it grows linearly.
+	backoff time.Duration
 }
 
 func New(outputDir string, timeout time.Duration) *HTTPFetcher {
@@ -37,7 +44,58 @@ func New(outputDir string, timeout time.Duration) *HTTPFetcher {
 		},
 		outputDir: outputDir,
 		timeout:   timeout,
+		warn:      os.Stderr,
+		retries:   2,
+		backoff:   500 * time.Millisecond,
 	}
+}
+
+// isTransient reports whether a request should be retried.
+func isTransient(resp *http.Response, err error) bool {
+	if err != nil {
+		return true
+	}
+	switch resp.StatusCode {
+	case http.StatusRequestTimeout, http.StatusTooManyRequests,
+		http.StatusInternalServerError, http.StatusBadGateway,
+		http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	}
+	return false
+}
+
+// do performs req, retrying transient failures. The returned response has an
+// open body that the caller must close.
+func (f *HTTPFetcher) do(ctx context.Context, newReq func() (*http.Request, error)) (*http.Response, error) {
+	var lastErr error
+	for attempt := 0; attempt <= f.retries; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(f.backoff * time.Duration(attempt)):
+			}
+		}
+
+		req, err := newReq()
+		if err != nil {
+			return nil, err
+		}
+		resp, err := f.client.Do(req)
+		if !isTransient(resp, err) {
+			return resp, nil
+		}
+		if err != nil {
+			lastErr = err
+		} else {
+			lastErr = fmt.Errorf("unexpected status: %d", resp.StatusCode)
+			resp.Body.Close()
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+	}
+	return nil, lastErr
 }
 
 func (f *HTTPFetcher) Fetch(ctx context.Context, pkg domain.Package) domain.FetchResult {
@@ -45,25 +103,28 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, pkg domain.Package) domain.Fetc
 	filename := fmt.Sprintf("%s-%s%s", pkg.Name, pkg.FullVersion, ext)
 	dst := filepath.Join(f.outputDir, filename)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", pkg.DownloadURL, nil)
-	if err != nil {
-		return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Error: err}
-	}
-
-	resp, err := f.client.Do(req)
+	resp, err := f.do(ctx, func() (*http.Request, error) {
+		return http.NewRequestWithContext(ctx, http.MethodGet, pkg.DownloadURL, nil)
+	})
 	if err != nil {
 		return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Error: err}
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized && strings.Contains(pkg.DownloadURL, "ghcr.io") {
+		wwwAuth := resp.Header.Get("WWW-Authenticate")
 		resp.Body.Close()
-		token, err := f.getGHCRToken(ctx, resp.Header.Get("WWW-Authenticate"))
+		token, err := f.getGHCRToken(ctx, wwwAuth)
 		if err != nil {
 			return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Error: err}
 		}
-		req, _ = http.NewRequestWithContext(ctx, "GET", pkg.DownloadURL, nil)
-		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err = f.client.Do(req)
+		resp, err = f.do(ctx, func() (*http.Request, error) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, pkg.DownloadURL, nil)
+			if err != nil {
+				return nil, err
+			}
+			req.Header.Set("Authorization", "Bearer "+token)
+			return req, nil
+		})
 		if err != nil {
 			return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Error: err}
 		}
@@ -86,7 +147,6 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, pkg domain.Package) domain.Fetc
 	if err != nil {
 		return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Error: err}
 	}
-	defer file.Close()
 
 	bar := progressbar.DefaultBytes(
 		resp.ContentLength,
@@ -98,15 +158,24 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, pkg domain.Package) domain.Fetc
 	h := sha256.New()
 	if pkg.SHA256 != "" {
 		writers = append(writers, h)
+	} else if f.warn != nil {
+		fmt.Fprintf(f.warn, "warning: %s has no checksum, skipping verification\n", pkg.Name)
 	}
 
 	if _, err := io.Copy(io.MultiWriter(writers...), resp.Body); err != nil {
+		file.Close()
+		os.Remove(dst)
+		return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Error: err}
+	}
+
+	if err := file.Close(); err != nil {
+		os.Remove(dst)
 		return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Error: err}
 	}
 
 	if pkg.SHA256 != "" {
 		actual := hex.EncodeToString(h.Sum(nil))
-		if actual != pkg.SHA256 {
+		if !strings.EqualFold(actual, pkg.SHA256) {
 			os.Remove(dst)
 			return domain.FetchResult{
 				Package: pkg.Name,
@@ -122,25 +191,14 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, pkg domain.Package) domain.Fetc
 // Detailed here
 // https://stackoverflow.com/questions/79168476/how-to-get-api-token-to-github-container-registry
 func (f *HTTPFetcher) getGHCRToken(ctx context.Context, wwwAuth string) (string, error) {
-	// Bearer realm="...",service="...",scope="..."
-	params := make(map[string]string)
-	for _, part := range strings.Split(wwwAuth, ",") {
-		part = strings.TrimSpace(part)
-		part = strings.TrimPrefix(part, "Bearer ")
-		if idx := strings.Index(part, "="); idx > 0 {
-			key := part[:idx]
-			val := strings.Trim(part[idx+1:], `"`)
-			params[key] = val
-		}
-	}
-
-	tokenURL := fmt.Sprintf("%s?service=%s&scope=%s", params["realm"], params["service"], params["scope"])
-	req, err := http.NewRequestWithContext(ctx, "GET", tokenURL, nil)
+	tokenURL, err := tokenURLFromChallenge(wwwAuth)
 	if err != nil {
 		return "", err
 	}
 
-	resp, err := f.client.Do(req)
+	resp, err := f.do(ctx, func() (*http.Request, error) {
+		return http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
+	})
 	if err != nil {
 		return "", err
 	}
@@ -157,6 +215,41 @@ func (f *HTTPFetcher) getGHCRToken(ctx context.Context, wwwAuth string) (string,
 		return "", err
 	}
 	return result.Token, nil
+}
+
+// tokenURLFromChallenge builds the token endpoint URL from a
+// `Bearer realm="...",service="...",scope="..."` challenge. Parameters are
+// query-encoded so values containing ':' or '/' (as GHCR scopes do) are safe.
+func tokenURLFromChallenge(wwwAuth string) (string, error) {
+	params := make(map[string]string)
+	for _, part := range strings.Split(strings.TrimPrefix(strings.TrimSpace(wwwAuth), "Bearer "), ",") {
+		part = strings.TrimSpace(part)
+		if key, val, ok := strings.Cut(part, "="); ok {
+			params[key] = strings.Trim(val, `"`)
+		}
+	}
+
+	realm := params["realm"]
+	if realm == "" {
+		return "", fmt.Errorf("missing realm in WWW-Authenticate challenge")
+	}
+	u, err := url.Parse(realm)
+	if err != nil {
+		return "", fmt.Errorf("invalid realm %q: %w", realm, err)
+	}
+	if u.Scheme != "https" {
+		return "", fmt.Errorf("refusing non-https token realm %q", realm)
+	}
+
+	q := u.Query()
+	if v := params["service"]; v != "" {
+		q.Set("service", v)
+	}
+	if v := params["scope"]; v != "" {
+		q.Set("scope", v)
+	}
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }
 
 func extFromURL(rawURL string) string {
