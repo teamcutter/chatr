@@ -55,7 +55,7 @@ func newUpdateCmd() *cobra.Command {
 			fmt.Printf("%s Updated successfully: %s formulae, %s casks\n",
 				green("✓"), green(formulaeCount), green(caskCount))
 
-			st, err := state.NewSQLite(cfg.StateDB, cfg.ManifestFile)
+			st, err := state.NewSQLite(cfg.StateDB, cfg.ManifestFile, cfg.AppsDir)
 			if err != nil {
 				return nil
 			}

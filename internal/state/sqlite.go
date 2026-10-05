@@ -44,9 +44,13 @@ type SQLiteState struct {
 	db           *sql.DB
 	dbPath       string
 	manifestPath string
+	appsDir      string
 }
 
-func NewSQLite(dbPath, manifestPath string) (*SQLiteState, error) {
+// NewSQLite opens (or creates) the state database. appsDir is where cask
+// .app bundles live; it is needed to clean up after an interrupted cask
+// install.
+func NewSQLite(dbPath, manifestPath, appsDir string) (*SQLiteState, error) {
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
 		return nil, fmt.Errorf("failed to create state directory: %w", err)
 	}
@@ -70,6 +74,7 @@ func NewSQLite(dbPath, manifestPath string) (*SQLiteState, error) {
 		db:           db,
 		dbPath:       dbPath,
 		manifestPath: manifestPath,
+		appsDir:      appsDir,
 	}
 
 	if err := s.migrate(); err != nil {
@@ -197,7 +202,11 @@ func (s *SQLiteState) recover() error {
 			var apps []string
 			if err := json.Unmarshal([]byte(p.apps), &apps); err == nil {
 				for _, app := range apps {
-					os.RemoveAll(app)
+					// App names are stored bare; they only make sense inside appsDir.
+					if app == "" || filepath.Base(app) != app {
+						continue
+					}
+					os.RemoveAll(filepath.Join(s.appsDir, app))
 				}
 			}
 		} else {
