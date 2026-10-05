@@ -85,12 +85,6 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-func Save(cfg *Config) error {
-	configMu.Lock()
-	defer configMu.Unlock()
-	return save(cfg)
-}
-
 func save(cfg *Config) error {
 	home, _ := os.UserHomeDir()
 	base := filepath.Join(home, ".chatr")

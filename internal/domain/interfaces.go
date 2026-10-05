@@ -22,8 +22,6 @@ type Extractor interface {
 }
 
 type State interface {
-	Load() (*Manifest, error)
-	Save(m *Manifest) error
 	IsInstalled(name string) (bool, *InstalledPackage, error)
 	Add(pkg *InstalledPackage) error
 	Remove(name string) error

@@ -239,45 +239,6 @@ func (s *SQLiteState) insertPkg(tx *sql.Tx, pkg *domain.InstalledPackage, status
 	return err
 }
 
-func (s *SQLiteState) Load() (*domain.Manifest, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	pkgs, err := s.listInstalled()
-	if err != nil {
-		return nil, err
-	}
-
-	return &domain.Manifest{Packages: pkgs}, nil
-}
-
-func (s *SQLiteState) Save(m *domain.Manifest) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.Exec("DELETE FROM packages"); err != nil {
-		return err
-	}
-
-	for _, pkg := range m.Packages {
-		if err := s.insertPkg(tx, pkg, "installed"); err != nil {
-			return err
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return s.exportJSON()
-}
-
 func (s *SQLiteState) IsInstalled(name string) (bool, *domain.InstalledPackage, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
