@@ -40,9 +40,32 @@ func New(
 	}
 }
 
+// checkAppsAbsent refuses to proceed when any of the given .app bundles is
+// already present in the apps directory. Casks are extracted straight into
+// that directory and would silently replace whatever is there, including
+// applications the user installed by other means.
+func (m *Manager) checkAppsAbsent(apps []string) error {
+	for _, app := range apps {
+		if app == "" || filepath.Base(app) != app {
+			continue
+		}
+		appPath := filepath.Join(m.appsDir, app)
+		if _, err := os.Lstat(appPath); err == nil {
+			return fmt.Errorf("%s already exists and was not installed by chatr; remove it or use --force", appPath)
+		}
+	}
+	return nil
+}
+
 func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.InstalledPackage, error) {
 	if installed, _, _ := m.state.IsInstalled(pkg.Name); installed {
 		return nil, fmt.Errorf("package %s already installed", pkg.Name)
+	}
+
+	if pkg.IsCask && !pkg.Force {
+		if err := m.checkAppsAbsent(pkg.Apps); err != nil {
+			return nil, err
+		}
 	}
 
 	var archivePath string
@@ -69,6 +92,7 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		Revision:    pkg.Revision,
 		URL:         pkg.DownloadURL,
 		Path:        pkgPath,
+		Apps:        pkg.Apps,
 		IsDep:       pkg.IsDep,
 		IsCask:      pkg.IsCask,
 		KegOnly:     pkg.KegOnly,

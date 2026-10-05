@@ -13,6 +13,11 @@ type Package struct {
 	IsCask      bool
 	KegOnly     bool
 	Cellar      string
+	// Apps lists the .app bundle names a cask is expected to install.
+	Apps []string
+	// Force allows a cask install to replace an existing app bundle in the
+	// apps directory that chatr did not install.
+	Force bool
 }
 
 type FetchResult struct {
