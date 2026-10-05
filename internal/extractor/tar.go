@@ -8,8 +8,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/ulikunitz/xz"
@@ -54,6 +52,12 @@ func (te *TARExtractor) extractGo(src, dst string) error {
 		defer cleanup()
 	}
 
+	w, err := openArchiveWriter(dst)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+
 	tr := tar.NewReader(reader)
 
 	for {
@@ -65,36 +69,17 @@ func (te *TARExtractor) extractGo(src, dst string) error {
 			return err
 		}
 
-		if strings.Contains(header.Name, "..") {
-			return fmt.Errorf("invalid path in archive: %s", header.Name)
-		}
-
-		target := filepath.Join(dst, header.Name)
-
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0755); err != nil {
+			if err := w.Mkdir(header.Name); err != nil {
 				return err
 			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			if err := w.WriteFile(header.Name, header.FileInfo().Mode(), tr); err != nil {
 				return err
 			}
-			outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, header.FileInfo().Mode())
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(outFile, tr); err != nil {
-				outFile.Close()
-				return err
-			}
-			outFile.Close()
 		case tar.TypeSymlink:
-			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-				return err
-			}
-			os.Remove(target)
-			if err := os.Symlink(header.Linkname, target); err != nil {
+			if err := w.Symlink(header.Linkname, header.Name); err != nil {
 				return err
 			}
 		}

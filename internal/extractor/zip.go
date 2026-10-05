@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -22,59 +21,16 @@ func (ze *ZIPExtractor) Extract(src, dst string) error {
 	}
 	defer r.Close()
 
+	w, err := openArchiveWriter(dst)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+
 	for _, f := range r.File {
-		if strings.Contains(f.Name, "..") {
-			return fmt.Errorf("invalid path in archive: %s", f.Name)
-		}
-
-		target := filepath.Join(dst, f.Name)
-
-		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(target, 0755); err != nil {
-				return err
-			}
-			continue
-		}
-
-		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		if err := writeZipEntry(w, f); err != nil {
 			return err
 		}
-
-		if f.FileInfo().Mode()&os.ModeSymlink != 0 {
-			rc, err := f.Open()
-			if err != nil {
-				return err
-			}
-			linkTarget, err := io.ReadAll(rc)
-			rc.Close()
-			if err != nil {
-				return err
-			}
-			if err := os.Symlink(string(linkTarget), target); err != nil {
-				return err
-			}
-			continue
-		}
-
-		rc, err := f.Open()
-		if err != nil {
-			return err
-		}
-
-		outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
-		if err != nil {
-			rc.Close()
-			return err
-		}
-
-		if _, err := io.Copy(outFile, rc); err != nil {
-			rc.Close()
-			outFile.Close()
-			return err
-		}
-
-		rc.Close()
-		outFile.Close()
 	}
 
 	return nil
@@ -90,79 +46,70 @@ func (ze *ZIPExtractor) ExtractApps(src, dst string) ([]string, error) {
 
 	apps := make(map[string]bool)
 	for _, f := range r.File {
-		parts := strings.SplitN(f.Name, "/", 2)
-		if len(parts) > 0 && strings.HasSuffix(parts[0], ".app") {
-			apps[parts[0]] = true
+		if name, ok := topLevelApp(f.Name); ok {
+			apps[name] = true
 		}
 	}
 
+	w, err := openArchiveWriter(dst)
+	if err != nil {
+		return nil, err
+	}
+	defer w.Close()
+
 	for appName := range apps {
-		os.RemoveAll(filepath.Join(dst, appName))
+		if err := w.RemoveAll(appName); err != nil {
+			return nil, err
+		}
 	}
 
 	for _, f := range r.File {
-		parts := strings.SplitN(f.Name, "/", 2)
-		if len(parts) == 0 || !apps[parts[0]] {
+		name, ok := topLevelApp(f.Name)
+		if !ok || !apps[name] {
 			continue
 		}
-
-		if strings.Contains(f.Name, "..") {
-			return nil, fmt.Errorf("invalid path in archive: %s", f.Name)
-		}
-
-		target := filepath.Join(dst, f.Name)
-
-		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(target, 0755); err != nil {
-				return nil, err
-			}
-			continue
-		}
-
-		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		if err := writeZipEntry(w, f); err != nil {
 			return nil, err
 		}
-
-		if f.FileInfo().Mode()&os.ModeSymlink != 0 {
-			rc, err := f.Open()
-			if err != nil {
-				return nil, err
-			}
-			linkTarget, err := io.ReadAll(rc)
-			rc.Close()
-			if err != nil {
-				return nil, err
-			}
-			if err := os.Symlink(string(linkTarget), target); err != nil {
-				return nil, err
-			}
-			continue
-		}
-
-		rc, err := f.Open()
-		if err != nil {
-			return nil, err
-		}
-
-		outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
-		if err != nil {
-			rc.Close()
-			return nil, err
-		}
-
-		if _, err := io.Copy(outFile, rc); err != nil {
-			rc.Close()
-			outFile.Close()
-			return nil, err
-		}
-
-		rc.Close()
-		outFile.Close()
 	}
 
-	var result []string
+	result := make([]string, 0, len(apps))
 	for appName := range apps {
 		result = append(result, appName)
 	}
 	return result, nil
+}
+
+// topLevelApp returns the first path component of name if it is a .app bundle
+// sitting at the root of the archive.
+func topLevelApp(name string) (string, bool) {
+	first, _, _ := strings.Cut(strings.TrimPrefix(name, "./"), "/")
+	if first == "" || first == ".." || !strings.HasSuffix(first, ".app") {
+		return "", false
+	}
+	return first, true
+}
+
+func writeZipEntry(w *archiveWriter, f *zip.File) error {
+	info := f.FileInfo()
+
+	if info.IsDir() {
+		return w.Mkdir(f.Name)
+	}
+
+	rc, err := f.Open()
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+
+	if info.Mode()&os.ModeSymlink != 0 {
+		linkTarget, err := io.ReadAll(rc)
+		if err != nil {
+			return err
+		}
+		return w.Symlink(string(linkTarget), f.Name)
+	}
+
+	return w.WriteFile(f.Name, info.Mode(), rc)
 }
