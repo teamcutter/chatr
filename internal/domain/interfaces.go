@@ -36,3 +36,12 @@ type Registry interface {
 	GetVersion(ctx context.Context, name string) (string, error)
 	Update(ctx context.Context) (int, error)
 }
+
+type Progress interface {
+	Start(name string, total int64) Tracker
+}
+
+type Tracker interface {
+	Add(n int64)
+	Done()
+}
