@@ -10,11 +10,13 @@ A package manager CLI for downloading, installing, and managing binary packages 
 curl -sL https://raw.githubusercontent.com/teamcutter/chatr/main/install.sh | bash
 ```
 
-The chatr binary goes to `~/.chatr/bin`. Packages are installed under `/opt/chatr`, which the script creates once with `sudo`. Add both to your PATH:
+chatr and the packages it installs live under `/opt/chatr`, which the script creates once with `sudo`. Then add chatr to your shell, for zsh in `~/.zprofile`:
 
 ```bash
-export PATH="/opt/chatr/bin:$HOME/.chatr/bin:$PATH"
+eval "$(/opt/chatr/bin/chatr shellenv)"
 ```
+
+For bash use `~/.bash_profile` on macOS or `~/.bashrc` on Linux. For fish, add `/opt/chatr/bin/chatr shellenv fish | source` to `~/.config/fish/config.fish`. The script prints the right line for your shell.
 
 ### Why /opt/chatr
 
@@ -32,7 +34,7 @@ chatr remove --all
 sudo mkdir -p /opt/chatr && sudo chown $(whoami) /opt/chatr
 ```
 
-Then edit `~/.chatr/config.toml`: add `prefix = "/opt/chatr"` and delete `bin_dir`, `lib_dir`, `cellar_dir`, `opt_dir`, `include_dir`, `share_dir`, `etc_dir`, `var_dir` and `frameworks_dir`. Add `/opt/chatr/bin` to your PATH and reinstall your packages.
+Then edit `~/.chatr/config.toml`: add `prefix = "/opt/chatr"` and delete `bin_dir`, `lib_dir`, `cellar_dir`, `opt_dir`, `include_dir`, `share_dir`, `etc_dir`, `var_dir` and `frameworks_dir`. Replace the PATH line in your shell config with the `eval "$(chatr shellenv)"` line above, open a new terminal and reinstall your packages.
 
 ## Usage
 
@@ -160,6 +162,14 @@ Update chatr to the newest version.
 chatr new
 ```
 
+### shellenv
+
+Print shell code that puts chatr and its packages on `PATH`, `MANPATH` and `INFOPATH`. The shell is detected from `$SHELL` unless one is given. Evaluating it more than once is harmless.
+
+```bash
+chatr shellenv [sh|bash|zsh|fish]
+```
+
 ## Benchmarks
 
 chatr vs Homebrew on macOS (Apple Silicon). Measured with [hyperfine](https://github.com/sharkdp/hyperfine), 3 runs each.
@@ -207,17 +217,11 @@ chatr vs Homebrew on macOS (Apple Silicon). Measured with [hyperfine](https://gi
 ```bash
 git clone https://github.com/teamcutter/chatr.git
 cd chatr
-mkdir -p ~/.chatr/bin && go build -o ~/.chatr/bin/chatr ./cmd/chatr
-```
-
-Create the package prefix and make sure both bin directories are in your PATH:
-
-```bash
 sudo mkdir -p /opt/chatr && sudo chown $(whoami) /opt/chatr
-export PATH="/opt/chatr/bin:$HOME/.chatr/bin:$PATH"
+mkdir -p /opt/chatr/bin && go build -o /opt/chatr/bin/chatr ./cmd/chatr
 ```
 
-Add this line to your shell configuration file (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent.
+Then add chatr to your shell as described in [Installation](#installation).
 
 ## Registry
 

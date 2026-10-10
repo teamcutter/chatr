@@ -33,6 +33,7 @@ func Execute() error {
 		newUpgradeCmd(),
 		newUpdateCmd(),
 		newTldrCmd(),
+		newShellenvCmd(),
 	)
 	return rootCmd.Execute()
 }

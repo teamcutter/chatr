@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO="teamcutter/chatr"
-INSTALL_DIR="$HOME/.chatr/bin"
+PREFIX="/opt/chatr"
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 case "$OS" in
@@ -32,6 +32,30 @@ if command -v chatr &>/dev/null; then
         echo "chatr $VERSION is already installed"
         exit 0
     fi
+fi
+
+ensure_prefix() {
+    [[ -d "$PREFIX" && -w "$PREFIX" ]] && return 0
+    echo "chatr installs packages under $PREFIX. Creating it, sudo may ask for your password."
+    mkdir -p "$PREFIX" 2>/dev/null && [[ -w "$PREFIX" ]] && return 0
+    sudo mkdir -p "$PREFIX" < /dev/tty && sudo chown "$(id -un)" "$PREFIX" < /dev/tty
+}
+
+# Updates replace the binary where it already is. New installs put it in the
+# package prefix so a single PATH entry covers chatr and its packages.
+EXISTING=$(command -v chatr 2>/dev/null || true)
+if [[ -n "$EXISTING" && -w "$(dirname "$EXISTING")" ]]; then
+    INSTALL_DIR=$(dirname "$EXISTING")
+elif [[ -f "$HOME/.chatr/config.toml" || "$OS" == "windows" ]]; then
+    INSTALL_DIR="$HOME/.chatr/bin"
+elif ensure_prefix; then
+    INSTALL_DIR="$PREFIX/bin"
+else
+    INSTALL_DIR="$HOME/.chatr/bin"
+    echo "Could not create $PREFIX. Create it before installing packages:"
+    echo ""
+    echo "  sudo mkdir -p $PREFIX && sudo chown \$(whoami) $PREFIX"
+    echo ""
 fi
 
 EXT="tar.gz"
@@ -68,35 +92,18 @@ fi
 
 echo "Installed chatr to $INSTALL_DIR/chatr"
 
-# Packages live under a short prefix so paths compiled into Homebrew bottles
-# can be rewritten in place. Existing installs keep the prefix in their config.
-PREFIX="/opt/chatr"
-if [[ ! -f "$HOME/.chatr/config.toml" ]]; then
-    if [[ ! -d "$PREFIX" ]]; then
-        echo ""
-        echo "chatr installs packages under $PREFIX. Creating it, sudo may ask for your password."
-        if mkdir -p "$PREFIX" 2>/dev/null ||
-            { sudo mkdir -p "$PREFIX" < /dev/tty && sudo chown "$(id -un)" "$PREFIX" < /dev/tty; }; then
-            echo "Created $PREFIX"
-        else
-            echo "Could not create $PREFIX. Create it before installing packages:"
-            echo ""
-            echo "  sudo mkdir -p $PREFIX && sudo chown \$(whoami) $PREFIX"
-        fi
-    fi
-    PKG_BIN="$PREFIX/bin"
-else
-    PKG_BIN="$INSTALL_DIR"
-fi
-
-MISSING=""
-[[ ":$PATH:" != *":$INSTALL_DIR:"* ]] && MISSING="\$HOME/.chatr/bin"
-if [[ "$PKG_BIN" != "$INSTALL_DIR" && ":$PATH:" != *":$PKG_BIN:"* ]]; then
-    MISSING="$PKG_BIN${MISSING:+:$MISSING}"
-fi
-if [[ -n "$MISSING" ]]; then
+if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    case "${SHELL##*/}" in
+        zsh)  RC="~/.zprofile"; LINE="eval \"\$($INSTALL_DIR/chatr shellenv)\"" ;;
+        bash) [[ "$OS" == "darwin" ]] && RC="~/.bash_profile" || RC="~/.bashrc"
+              LINE="eval \"\$($INSTALL_DIR/chatr shellenv)\"" ;;
+        fish) RC="~/.config/fish/config.fish"; LINE="$INSTALL_DIR/chatr shellenv fish | source" ;;
+        *)    RC="~/.profile"; LINE="eval \"\$($INSTALL_DIR/chatr shellenv)\"" ;;
+    esac
     echo ""
-    echo "Add chatr to your PATH by adding this to your shell config:"
+    echo "Add chatr to your shell by adding this line to $RC:"
     echo ""
-    echo "  export PATH=\"$MISSING:\$PATH\""
+    echo "  $LINE"
+    echo ""
+    echo "Then open a new terminal, or run the line once in this one."
 fi
