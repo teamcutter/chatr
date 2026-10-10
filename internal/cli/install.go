@@ -26,6 +26,9 @@ func newInstallCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if !cask {
+				warnLongPrefix(cfg)
+			}
 
 			ctx := cmd.Context()
 			mu := &sync.Mutex{}
@@ -100,18 +103,19 @@ func newInstallCmd() *cobra.Command {
 					}
 
 					pkg, err := mgr.Install(ictx, domain.Package{
-						Name:        formula.Name,
-						Version:     formula.Version,
-						Revision:    formula.Revision,
-						FullVersion: formula.FullVersion(),
-						DownloadURL: formula.URL,
-						SHA256:      checksum,
-						IsDep:       rp.IsDep,
-						IsCask:      formula.IsCask,
-						KegOnly:     formula.KegOnly,
-						Cellar:      formula.Cellar,
-						Apps:        formula.Apps,
-						Force:       force,
+						Name:         formula.Name,
+						Version:      formula.Version,
+						Revision:     formula.Revision,
+						FullVersion:  formula.FullVersion(),
+						DownloadURL:  formula.URL,
+						SHA256:       checksum,
+						IsDep:        rp.IsDep,
+						IsCask:       formula.IsCask,
+						KegOnly:      formula.KegOnly,
+						Cellar:       formula.Cellar,
+						Dependencies: formula.Dependencies,
+						Apps:         formula.Apps,
+						Force:        force,
 					})
 					if err != nil {
 						outMu.Lock()

@@ -10,24 +10,43 @@ import (
 
 var configMu sync.Mutex
 
+// DefaultPrefix is no longer than any Homebrew build prefix, which lets
+// paths baked into bottle binaries be rewritten in place. It is not a user
+// setting.
+const DefaultPrefix = "/opt/chatr"
+
 type Config struct {
+	Prefix        string `toml:"-"`
 	CacheDir      string `toml:"cache_dir"`
 	ChatrDir      string `toml:"chatr_dir"`
 	PackagesDir   string `toml:"packages_dir"`
-	BinDir        string `toml:"bin_dir"`
-	LibDir        string `toml:"lib_dir"`
+	BinDir        string `toml:"-"`
+	LibDir        string `toml:"-"`
 	AppsDir       string `toml:"apps_dir"`
 	FormulaeDir   string `toml:"formulae_dir"`
 	ManifestFile  string `toml:"manifest_file"`
 	StateDB       string `toml:"state_db"`
 	MaxParallel   int    `toml:"max_parallel"`
-	CellarDir     string `toml:"cellar_dir"`
-	OptDir        string `toml:"opt_dir"`
-	IncludeDir    string `toml:"include_dir"`
-	ShareDir      string `toml:"share_dir"`
-	EtcDir        string `toml:"etc_dir"`
-	VarDir        string `toml:"var_dir"`
-	FrameworksDir string `toml:"frameworks_dir"`
+	CellarDir     string `toml:"-"`
+	OptDir        string `toml:"-"`
+	IncludeDir    string `toml:"-"`
+	ShareDir      string `toml:"-"`
+	EtcDir        string `toml:"-"`
+	VarDir        string `toml:"-"`
+	FrameworksDir string `toml:"-"`
+}
+
+func (c *Config) setPrefix(prefix string) {
+	c.Prefix = prefix
+	c.BinDir = filepath.Join(prefix, "bin")
+	c.LibDir = filepath.Join(prefix, "lib")
+	c.CellarDir = filepath.Join(prefix, "Cellar")
+	c.OptDir = filepath.Join(prefix, "opt")
+	c.IncludeDir = filepath.Join(prefix, "include")
+	c.ShareDir = filepath.Join(prefix, "share")
+	c.EtcDir = filepath.Join(prefix, "etc")
+	c.VarDir = filepath.Join(prefix, "var")
+	c.FrameworksDir = filepath.Join(prefix, "Frameworks")
 }
 
 func DefaultConfig() *Config {
@@ -35,24 +54,16 @@ func DefaultConfig() *Config {
 	base := filepath.Join(home, ".chatr")
 
 	cfg := &Config{
-		CacheDir:      filepath.Join(base, "cache"),
-		ChatrDir:      base,
-		PackagesDir:   filepath.Join(base, "packages"),
-		BinDir:        filepath.Join(base, "bin"),
-		LibDir:        filepath.Join(base, "lib"),
-		AppsDir:       "/Applications",
-		FormulaeDir:   filepath.Join(base, "formulae"),
-		ManifestFile:  filepath.Join(base, "installed.json"),
-		StateDB:       filepath.Join(base, "state.db"),
-		MaxParallel:   6,
-		CellarDir:     filepath.Join(base, "Cellar"),
-		OptDir:        filepath.Join(base, "opt"),
-		IncludeDir:    filepath.Join(base, "include"),
-		ShareDir:      filepath.Join(base, "share"),
-		EtcDir:        filepath.Join(base, "etc"),
-		VarDir:        filepath.Join(base, "var"),
-		FrameworksDir: filepath.Join(base, "Frameworks"),
+		CacheDir:     filepath.Join(base, "cache"),
+		ChatrDir:     base,
+		PackagesDir:  filepath.Join(base, "packages"),
+		AppsDir:      "/Applications",
+		FormulaeDir:  filepath.Join(base, "formulae"),
+		ManifestFile: filepath.Join(base, "installed.json"),
+		StateDB:      filepath.Join(base, "state.db"),
+		MaxParallel:  6,
 	}
+	cfg.setPrefix(DefaultPrefix)
 
 	return cfg
 }
@@ -78,8 +89,27 @@ func Load() (*Config, error) {
 		return cfg, nil
 	}
 
-	if _, err := toml.DecodeFile(configPath, cfg); err != nil {
+	return decode(configPath, home, cfg)
+}
+
+// decode overlays the config file on the defaults. Directory keys inside the
+// prefix are not settings. The one exception is a config written before
+// /opt/chatr, whose cellar_dir is exactly ~/.chatr/Cellar: its packages were
+// relocated for ~/.chatr and stay there until the user migrates.
+func decode(path, home string, cfg *Config) (*Config, error) {
+	if _, err := toml.DecodeFile(path, cfg); err != nil {
 		return nil, err
+	}
+
+	var legacy struct {
+		CellarDir string `toml:"cellar_dir"`
+	}
+	if _, err := toml.DecodeFile(path, &legacy); err != nil {
+		return nil, err
+	}
+	legacyPrefix := filepath.Join(home, ".chatr")
+	if legacy.CellarDir == filepath.Join(legacyPrefix, "Cellar") {
+		cfg.setPrefix(legacyPrefix)
 	}
 
 	return cfg, nil

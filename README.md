@@ -10,6 +10,30 @@ A package manager CLI for downloading, installing, and managing binary packages 
 curl -sL https://raw.githubusercontent.com/teamcutter/chatr/main/install.sh | bash
 ```
 
+chatr and the packages it installs live under `/opt/chatr`, which the script creates once with `sudo`. Then add chatr to your shell, for zsh in `~/.zprofile`:
+
+```bash
+eval "$(/opt/chatr/bin/chatr shellenv)"
+```
+
+For bash use `~/.bash_profile` on macOS or `~/.bashrc` on Linux. For fish, add `/opt/chatr/bin/chatr shellenv fish | source` to `~/.config/fish/config.fish`. The script prints the right line for your shell.
+
+### Why /opt/chatr
+
+Homebrew bottles are compiled for `/opt/homebrew` on Apple Silicon, `/usr/local` on Intel and `/home/linuxbrew/.linuxbrew` on Linux, and those paths are baked into the binaries. chatr rewrites them in place, which only works when the new prefix is no longer than the original. `/opt/chatr` fits on every platform, so the prefix is fixed and not a setting.
+
+### Moving to /opt/chatr
+
+Installs made before `/opt/chatr` keep using `~/.chatr`, because their packages were relocated for that path. On macOS, tools that locate their own files at runtime, such as Python, git or OpenSSL, can break there, and chatr prints a warning on install and upgrade. To move:
+
+```bash
+chatr list                       # note what you have installed
+chatr remove --all
+sudo mkdir -p /opt/chatr && sudo chown $(whoami) /opt/chatr
+```
+
+Then delete the `bin_dir`, `lib_dir`, `cellar_dir`, `opt_dir`, `include_dir`, `share_dir`, `etc_dir`, `var_dir` and `frameworks_dir` lines from `~/.chatr/config.toml`. They are no longer settings, and chatr only reads `cellar_dir` to recognize the old layout. Replace the PATH line in your shell config with the `eval "$(chatr shellenv)"` line above, open a new terminal and reinstall your packages.
+
 ## Usage
 
 ### Install a package
@@ -19,8 +43,8 @@ curl -sL https://raw.githubusercontent.com/teamcutter/chatr/main/install.sh | ba
 Downloading hello 100% |█████████████████████████████████████████████| (53/53 kB, 540 kB/s)
 
 ✓ hello-2.12.2
-  cellar: /Users/user/.chatr/Cellar/hello/2.12.2
-  opt: /Users/user/.chatr/opt/hello
+  cellar: /opt/chatr/Cellar/hello/2.12.2
+  opt: /opt/chatr/opt/hello
 
 ~/ hello
 Hello, world!
@@ -136,6 +160,14 @@ Update chatr to the newest version.
 chatr new
 ```
 
+### shellenv
+
+Print shell code that puts chatr and its packages on `PATH`, `MANPATH` and `INFOPATH`. The shell is detected from `$SHELL` unless one is given. Evaluating it more than once is harmless.
+
+```bash
+chatr shellenv [sh|bash|zsh|fish]
+```
+
 ## Benchmarks
 
 chatr vs Homebrew on macOS (Apple Silicon). Measured with [hyperfine](https://github.com/sharkdp/hyperfine), 3 runs each.
@@ -183,16 +215,11 @@ chatr vs Homebrew on macOS (Apple Silicon). Measured with [hyperfine](https://gi
 ```bash
 git clone https://github.com/teamcutter/chatr.git
 cd chatr
-mkdir -p ~/.chatr/bin && go build -o ~/.chatr/bin/chatr ./cmd/chatr
+sudo mkdir -p /opt/chatr && sudo chown $(whoami) /opt/chatr
+mkdir -p /opt/chatr/bin && go build -o /opt/chatr/bin/chatr ./cmd/chatr
 ```
 
-Make sure that chatr bin directory is in your PATH, otherwise add it:
-
-```bash
-export PATH="$HOME/.chatr/bin:$PATH"
-```
-
-Add this line to your shell configuration file (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent.
+Then add chatr to your shell as described in [Installation](#installation).
 
 ## Registry
 

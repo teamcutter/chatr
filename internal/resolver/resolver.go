@@ -2,12 +2,16 @@ package resolver
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 
 	"github.com/teamcutter/chatr/internal/domain"
 	"golang.org/x/sync/errgroup"
 )
+
+var ErrNoBottle = errors.New("no prebuilt bottle")
 
 type Resolver struct {
 	registry domain.Registry
@@ -55,6 +59,9 @@ func (r *Resolver) fetchAll(ctx context.Context, name string, fetched map[string
 	if err != nil {
 		return fmt.Errorf("resolving %s: %w", name, err)
 	}
+	if formula.URL == "" && !formula.IsCask {
+		return fmt.Errorf("%w for %s/%s; chatr cannot build from source", ErrNoBottle, runtime.GOOS, runtime.GOARCH)
+	}
 
 	mu.Lock()
 	fetched[name] = formula
@@ -64,7 +71,10 @@ func (r *Resolver) fetchAll(ctx context.Context, name string, fetched map[string
 	g, ctx := errgroup.WithContext(ctx)
 	for _, dep := range deps {
 		g.Go(func() error {
-			return r.fetchAll(ctx, dep, fetched, mu)
+			if err := r.fetchAll(ctx, dep, fetched, mu); err != nil {
+				return fmt.Errorf("dependency %s: %w", dep, err)
+			}
+			return nil
 		})
 	}
 

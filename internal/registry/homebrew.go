@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -40,13 +39,7 @@ type Formulae struct {
 		Head   string `json:"head"`
 	} `json:"versions"`
 	Revision int `json:"revision"`
-	URLs     struct {
-		Stable struct {
-			URL      string `json:"url"`
-			Checksum string `json:"checksum"`
-		} `json:"stable"`
-	} `json:"urls"`
-	Bottle struct {
+	Bottle   struct {
 		Stable struct {
 			Files map[string]struct {
 				URL    string `json:"url"`
@@ -293,11 +286,6 @@ func (h *HomebrewRegistry) toFormula(f *Formulae) *domain.Formula {
 		}
 	}
 
-	if url == "" && f.URLs.Stable.URL != "" {
-		url = f.URLs.Stable.URL
-		sha256 = f.URLs.Stable.Checksum
-	}
-
 	return &domain.Formula{
 		Name:         f.Name,
 		Description:  f.Desc,
@@ -310,23 +298,4 @@ func (h *HomebrewRegistry) toFormula(f *Formulae) *domain.Formula {
 		KegOnly:      f.KegOnly,
 		Cellar:       cellar,
 	}
-}
-
-func getPlatformCandidates() []string {
-	var candidates []string
-	switch runtime.GOOS {
-	case "darwin":
-		if runtime.GOARCH == "arm64" {
-			candidates = []string{"arm64_sequoia", "arm64_sonoma", "arm64_ventura", "arm64_monterey"}
-		} else {
-			candidates = []string{"sequoia", "sonoma", "ventura", "monterey"}
-		}
-	case "linux":
-		if runtime.GOARCH == "amd64" {
-			candidates = []string{"x86_64_linux"}
-		} else if runtime.GOARCH == "arm64" {
-			candidates = []string{"aarch64_linux"}
-		}
-	}
-	return append(candidates, "all")
 }
