@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"time"
 
@@ -75,6 +78,9 @@ func newManagerWithOptions(cask bool) (*manager.Manager, *config.Config, domain.
 
 	for _, dir := range []string{cfg.OptDir, cfg.IncludeDir, cfg.ShareDir, cfg.EtcDir, cfg.VarDir, cfg.FrameworksDir} {
 		if err := os.MkdirAll(dir, 0755); err != nil {
+			if errors.Is(err, fs.ErrPermission) {
+				return nil, nil, nil, nil, fmt.Errorf("cannot write to prefix %s; create it once with:\n\n  sudo mkdir -p %s && sudo chown $(whoami) %s", cfg.Prefix, cfg.Prefix, cfg.Prefix)
+			}
 			return nil, nil, nil, nil, err
 		}
 	}

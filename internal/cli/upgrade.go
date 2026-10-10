@@ -32,6 +32,7 @@ func newUpgradeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			warnLongPrefix(cfg)
 
 			mgr.Reconcile()
 			mgr.Flush()

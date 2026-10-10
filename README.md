@@ -10,6 +10,30 @@ A package manager CLI for downloading, installing, and managing binary packages 
 curl -sL https://raw.githubusercontent.com/teamcutter/chatr/main/install.sh | bash
 ```
 
+The chatr binary goes to `~/.chatr/bin`. Packages are installed under `/opt/chatr`, which the script creates once with `sudo`. Add both to your PATH:
+
+```bash
+export PATH="/opt/chatr/bin:$HOME/.chatr/bin:$PATH"
+```
+
+### Why /opt/chatr
+
+Homebrew bottles are compiled for `/opt/homebrew` on Apple Silicon, `/usr/local` on Intel and `/home/linuxbrew/.linuxbrew` on Linux, and those paths are baked into the binaries. chatr rewrites them in place, which only works when the new prefix is no longer than the original. `/opt/chatr` fits on every platform. A longer prefix such as `~/.chatr` still installs, but tools that locate their own files at runtime, such as Python, git or OpenSSL, can break.
+
+The prefix is the `prefix` key in `~/.chatr/config.toml`.
+
+### Moving to /opt/chatr
+
+Installs made before `/opt/chatr` became the default keep their old paths, and chatr prints a warning on install and upgrade. To move:
+
+```bash
+chatr list                       # note what you have installed
+chatr remove --all
+sudo mkdir -p /opt/chatr && sudo chown $(whoami) /opt/chatr
+```
+
+Then edit `~/.chatr/config.toml`: add `prefix = "/opt/chatr"` and delete `bin_dir`, `lib_dir`, `cellar_dir`, `opt_dir`, `include_dir`, `share_dir`, `etc_dir`, `var_dir` and `frameworks_dir`. Add `/opt/chatr/bin` to your PATH and reinstall your packages.
+
 ## Usage
 
 ### Install a package
@@ -19,8 +43,8 @@ curl -sL https://raw.githubusercontent.com/teamcutter/chatr/main/install.sh | ba
 Downloading hello 100% |█████████████████████████████████████████████| (53/53 kB, 540 kB/s)
 
 ✓ hello-2.12.2
-  cellar: /Users/user/.chatr/Cellar/hello/2.12.2
-  opt: /Users/user/.chatr/opt/hello
+  cellar: /opt/chatr/Cellar/hello/2.12.2
+  opt: /opt/chatr/opt/hello
 
 ~/ hello
 Hello, world!
@@ -186,10 +210,11 @@ cd chatr
 mkdir -p ~/.chatr/bin && go build -o ~/.chatr/bin/chatr ./cmd/chatr
 ```
 
-Make sure that chatr bin directory is in your PATH, otherwise add it:
+Create the package prefix and make sure both bin directories are in your PATH:
 
 ```bash
-export PATH="$HOME/.chatr/bin:$PATH"
+sudo mkdir -p /opt/chatr && sudo chown $(whoami) /opt/chatr
+export PATH="/opt/chatr/bin:$HOME/.chatr/bin:$PATH"
 ```
 
 Add this line to your shell configuration file (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent.

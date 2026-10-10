@@ -26,6 +26,9 @@ func newInstallCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if !cask {
+				warnLongPrefix(cfg)
+			}
 
 			ctx := cmd.Context()
 			mu := &sync.Mutex{}

@@ -68,9 +68,35 @@ fi
 
 echo "Installed chatr to $INSTALL_DIR/chatr"
 
-if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+# Packages live under a short prefix so paths compiled into Homebrew bottles
+# can be rewritten in place. Existing installs keep the prefix in their config.
+PREFIX="/opt/chatr"
+if [[ ! -f "$HOME/.chatr/config.toml" ]]; then
+    if [[ ! -d "$PREFIX" ]]; then
+        echo ""
+        echo "chatr installs packages under $PREFIX. Creating it, sudo may ask for your password."
+        if mkdir -p "$PREFIX" 2>/dev/null ||
+            { sudo mkdir -p "$PREFIX" < /dev/tty && sudo chown "$(id -un)" "$PREFIX" < /dev/tty; }; then
+            echo "Created $PREFIX"
+        else
+            echo "Could not create $PREFIX. Create it before installing packages:"
+            echo ""
+            echo "  sudo mkdir -p $PREFIX && sudo chown \$(whoami) $PREFIX"
+        fi
+    fi
+    PKG_BIN="$PREFIX/bin"
+else
+    PKG_BIN="$INSTALL_DIR"
+fi
+
+MISSING=""
+[[ ":$PATH:" != *":$INSTALL_DIR:"* ]] && MISSING="\$HOME/.chatr/bin"
+if [[ "$PKG_BIN" != "$INSTALL_DIR" && ":$PATH:" != *":$PKG_BIN:"* ]]; then
+    MISSING="$PKG_BIN${MISSING:+:$MISSING}"
+fi
+if [[ -n "$MISSING" ]]; then
     echo ""
     echo "Add chatr to your PATH by adding this to your shell config:"
     echo ""
-    echo "  export PATH=\"\$HOME/.chatr/bin:\$PATH\""
+    echo "  export PATH=\"$MISSING:\$PATH\""
 fi
