@@ -26,45 +26,54 @@ func TestDefaultUsesShortPrefix(t *testing.T) {
 	}
 }
 
-func TestLegacyConfigKeepsItsPaths(t *testing.T) {
+func TestLegacyConfigKeepsHomeLayout(t *testing.T) {
 	p := writeConfig(t, `
 cellar_dir = "/home/u/.chatr/Cellar"
 opt_dir = "/home/u/.chatr/opt"
-bin_dir = "/home/u/.chatr/bin"
+bin_dir = "/somewhere/else/bin"
 `)
-	cfg, err := decode(p, DefaultConfig())
+	cfg, err := decode(p, "/home/u", DefaultConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Prefix != "/home/u/.chatr" {
-		t.Errorf("prefix = %s, want inferred /home/u/.chatr", cfg.Prefix)
-	}
-	if cfg.LibDir != "/home/u/.chatr/lib" {
-		t.Errorf("unset dirs should follow the inferred prefix, lib = %s", cfg.LibDir)
+	if cfg.Prefix != "/home/u/.chatr" || cfg.CellarDir != "/home/u/.chatr/Cellar" {
+		t.Errorf("prefix=%s cellar=%s, want the ~/.chatr layout", cfg.Prefix, cfg.CellarDir)
 	}
 	if cfg.BinDir != "/home/u/.chatr/bin" {
-		t.Errorf("bin = %s", cfg.BinDir)
+		t.Errorf("bin_dir is not a setting, got %s", cfg.BinDir)
 	}
 }
 
-func TestPrefixDrivesUnsetDirs(t *testing.T) {
-	p := writeConfig(t, `
-prefix = "/opt/x"
-etc_dir = "/etc/x"
-`)
-	cfg, err := decode(p, DefaultConfig())
+func TestPrefixIsNotConfigurable(t *testing.T) {
+	cases := map[string]string{
+		"prefix key":        `prefix = "/opt/x"`,
+		"custom cellar_dir": `cellar_dir = "/data/Cellar"`,
+		"custom bin_dir":    `bin_dir = "/usr/local/bin"`,
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			cfg, err := decode(writeConfig(t, body), "/home/u", DefaultConfig())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Prefix != DefaultPrefix || cfg.CellarDir != "/opt/chatr/Cellar" || cfg.BinDir != "/opt/chatr/bin" {
+				t.Errorf("prefix=%s cellar=%s bin=%s, want /opt/chatr", cfg.Prefix, cfg.CellarDir, cfg.BinDir)
+			}
+		})
+	}
+}
+
+func TestOtherSettingsStillApply(t *testing.T) {
+	cfg, err := decode(writeConfig(t, "max_parallel = 2\napps_dir = \"/Users/u/Applications\""), "/home/u", DefaultConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.CellarDir != "/opt/x/Cellar" || cfg.OptDir != "/opt/x/opt" {
-		t.Errorf("cellar=%s opt=%s", cfg.CellarDir, cfg.OptDir)
-	}
-	if cfg.EtcDir != "/etc/x" {
-		t.Errorf("explicit etc_dir lost: %s", cfg.EtcDir)
+	if cfg.MaxParallel != 2 || cfg.AppsDir != "/Users/u/Applications" {
+		t.Errorf("max_parallel=%d apps_dir=%s", cfg.MaxParallel, cfg.AppsDir)
 	}
 }
 
-func TestSaveOmitsDerivedDirs(t *testing.T) {
+func TestSaveWritesNoPrefixSettings(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	if err := save(DefaultConfig()); err != nil {
@@ -74,8 +83,9 @@ func TestSaveOmitsDerivedDirs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := string(data)
-	if !strings.Contains(s, `prefix = "/opt/chatr"`) || strings.Contains(s, "cellar_dir") {
-		t.Errorf("saved config should carry prefix only:\n%s", s)
+	for _, key := range []string{"prefix", "cellar_dir", "bin_dir", "opt_dir"} {
+		if strings.Contains(string(data), key) {
+			t.Errorf("saved config contains %s:\n%s", key, data)
+		}
 	}
 }

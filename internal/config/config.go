@@ -11,57 +11,42 @@ import (
 var configMu sync.Mutex
 
 // DefaultPrefix is no longer than any Homebrew build prefix, which lets
-// paths baked into bottle binaries be rewritten in place.
+// paths baked into bottle binaries be rewritten in place. It is not a user
+// setting.
 const DefaultPrefix = "/opt/chatr"
 
 type Config struct {
-	Prefix        string `toml:"prefix"`
+	Prefix        string `toml:"-"`
 	CacheDir      string `toml:"cache_dir"`
 	ChatrDir      string `toml:"chatr_dir"`
 	PackagesDir   string `toml:"packages_dir"`
-	BinDir        string `toml:"bin_dir,omitempty"`
-	LibDir        string `toml:"lib_dir,omitempty"`
+	BinDir        string `toml:"-"`
+	LibDir        string `toml:"-"`
 	AppsDir       string `toml:"apps_dir"`
 	FormulaeDir   string `toml:"formulae_dir"`
 	ManifestFile  string `toml:"manifest_file"`
 	StateDB       string `toml:"state_db"`
 	MaxParallel   int    `toml:"max_parallel"`
-	CellarDir     string `toml:"cellar_dir,omitempty"`
-	OptDir        string `toml:"opt_dir,omitempty"`
-	IncludeDir    string `toml:"include_dir,omitempty"`
-	ShareDir      string `toml:"share_dir,omitempty"`
-	EtcDir        string `toml:"etc_dir,omitempty"`
-	VarDir        string `toml:"var_dir,omitempty"`
-	FrameworksDir string `toml:"frameworks_dir,omitempty"`
+	CellarDir     string `toml:"-"`
+	OptDir        string `toml:"-"`
+	IncludeDir    string `toml:"-"`
+	ShareDir      string `toml:"-"`
+	EtcDir        string `toml:"-"`
+	VarDir        string `toml:"-"`
+	FrameworksDir string `toml:"-"`
 }
 
-// prefixDirs maps each prefix-relative directory to its config key and field.
-func (c *Config) prefixDirs() []struct {
-	key, sub string
-	field    *string
-} {
-	return []struct {
-		key, sub string
-		field    *string
-	}{
-		{"bin_dir", "bin", &c.BinDir},
-		{"lib_dir", "lib", &c.LibDir},
-		{"cellar_dir", "Cellar", &c.CellarDir},
-		{"opt_dir", "opt", &c.OptDir},
-		{"include_dir", "include", &c.IncludeDir},
-		{"share_dir", "share", &c.ShareDir},
-		{"etc_dir", "etc", &c.EtcDir},
-		{"var_dir", "var", &c.VarDir},
-		{"frameworks_dir", "Frameworks", &c.FrameworksDir},
-	}
-}
-
-func (c *Config) applyPrefix(isSet func(key string) bool) {
-	for _, d := range c.prefixDirs() {
-		if !isSet(d.key) {
-			*d.field = filepath.Join(c.Prefix, d.sub)
-		}
-	}
+func (c *Config) setPrefix(prefix string) {
+	c.Prefix = prefix
+	c.BinDir = filepath.Join(prefix, "bin")
+	c.LibDir = filepath.Join(prefix, "lib")
+	c.CellarDir = filepath.Join(prefix, "Cellar")
+	c.OptDir = filepath.Join(prefix, "opt")
+	c.IncludeDir = filepath.Join(prefix, "include")
+	c.ShareDir = filepath.Join(prefix, "share")
+	c.EtcDir = filepath.Join(prefix, "etc")
+	c.VarDir = filepath.Join(prefix, "var")
+	c.FrameworksDir = filepath.Join(prefix, "Frameworks")
 }
 
 func DefaultConfig() *Config {
@@ -69,7 +54,6 @@ func DefaultConfig() *Config {
 	base := filepath.Join(home, ".chatr")
 
 	cfg := &Config{
-		Prefix:       DefaultPrefix,
 		CacheDir:     filepath.Join(base, "cache"),
 		ChatrDir:     base,
 		PackagesDir:  filepath.Join(base, "packages"),
@@ -79,7 +63,7 @@ func DefaultConfig() *Config {
 		StateDB:      filepath.Join(base, "state.db"),
 		MaxParallel:  6,
 	}
-	cfg.applyPrefix(func(string) bool { return false })
+	cfg.setPrefix(DefaultPrefix)
 
 	return cfg
 }
@@ -105,22 +89,29 @@ func Load() (*Config, error) {
 		return cfg, nil
 	}
 
-	return decode(configPath, cfg)
+	return decode(configPath, home, cfg)
 }
 
-// decode overlays the config file on the defaults. Package directories that
-// the file does not set are derived from the prefix. Older files have no
-// prefix key but list every directory, so their prefix is inferred from the
-// Cellar location and nothing moves.
-func decode(path string, cfg *Config) (*Config, error) {
-	md, err := toml.DecodeFile(path, cfg)
-	if err != nil {
+// decode overlays the config file on the defaults. Directory keys inside the
+// prefix are not settings. The one exception is a config written before
+// /opt/chatr, whose cellar_dir is exactly ~/.chatr/Cellar: its packages were
+// relocated for ~/.chatr and stay there until the user migrates.
+func decode(path, home string, cfg *Config) (*Config, error) {
+	if _, err := toml.DecodeFile(path, cfg); err != nil {
 		return nil, err
 	}
-	if !md.IsDefined("prefix") && md.IsDefined("cellar_dir") {
-		cfg.Prefix = filepath.Dir(cfg.CellarDir)
+
+	var legacy struct {
+		CellarDir string `toml:"cellar_dir"`
 	}
-	cfg.applyPrefix(func(key string) bool { return md.IsDefined(key) })
+	if _, err := toml.DecodeFile(path, &legacy); err != nil {
+		return nil, err
+	}
+	legacyPrefix := filepath.Join(home, ".chatr")
+	if legacy.CellarDir == filepath.Join(legacyPrefix, "Cellar") {
+		cfg.setPrefix(legacyPrefix)
+	}
+
 	return cfg, nil
 }
 
@@ -137,9 +128,5 @@ func save(cfg *Config) error {
 	}
 	defer f.Close()
 
-	out := *cfg
-	for _, d := range out.prefixDirs() {
-		*d.field = ""
-	}
-	return toml.NewEncoder(f).Encode(out)
+	return toml.NewEncoder(f).Encode(cfg)
 }
