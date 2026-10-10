@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -147,211 +148,220 @@ func (l *Linker) UnlinkFromPrefix(name string, linkedDirs []string) error {
 	return nil
 }
 
-func (l *Linker) Relocate(pkgPath, chatrPrefix string) error {
+// BuildPrefix is the prefix Homebrew bottles for this platform are built
+// against, and therefore the only prefix relocation rewrites.
+func BuildPrefix() string {
+	switch {
+	case runtime.GOOS == "linux":
+		return "/home/linuxbrew/.linuxbrew"
+	case runtime.GOARCH == "arm64":
+		return "/opt/homebrew"
+	default:
+		return "/usr/local"
+	}
+}
+
+// CanRelocateBinaries reports whether paths embedded in bottle binaries fit
+// when rewritten to prefix.
+func CanRelocateBinaries(prefix string) bool {
+	return len(prefix) <= len(BuildPrefix())
+}
+
+type RelocateOptions struct {
+	Name         string
+	Dependencies []string
+}
+
+func (l *Linker) Relocate(pkgPath, chatrPrefix string, opts RelocateOptions) error {
+	buildPrefix := BuildPrefix()
 	chatrCellar := filepath.Join(chatrPrefix, "Cellar")
 
-	cellarPrefixes := []string{
-		"/opt/homebrew/Cellar",
-		"/usr/local/Cellar",
-		"/home/linuxbrew/.linuxbrew/Cellar",
-	}
-	homebrewPrefixes := []string{
-		"/opt/homebrew",
-		"/usr/local",
-		"/home/linuxbrew/.linuxbrew",
-	}
+	replacer := strings.NewReplacer(
+		"@@HOMEBREW_PREFIX@@", chatrPrefix,
+		"@@HOMEBREW_CELLAR@@", chatrCellar,
+		"@@HOMEBREW_REPOSITORY@@", chatrPrefix,
+		"@@HOMEBREW_LIBRARY@@", filepath.Join(chatrPrefix, "Library"),
+		"@@HOMEBREW_PERL@@", perlPath(chatrPrefix, opts.Name, opts.Dependencies),
+		"@@HOMEBREW_JAVA@@", javaHome(chatrPrefix, opts.Dependencies, runtime.GOOS),
+		buildPrefix+"/Cellar", chatrCellar,
+		buildPrefix, chatrPrefix,
+	)
 
-	placeholders := map[string]string{
-		"@@HOMEBREW_PREFIX@@": chatrPrefix,
-		"@@HOMEBREW_CELLAR@@": chatrCellar,
-	}
+	filepath.WalkDir(pkgPath, func(path string, d os.DirEntry, err error) error {
+		if err != nil || !d.Type().IsRegular() {
+			return nil
+		}
+		relocateTextFile(path, replacer)
+		return nil
+	})
 
-	for dirName := range l.prefixDirs {
-		dirPath := filepath.Join(pkgPath, dirName)
-		l.walkAndReplace(dirPath, placeholders, cellarPrefixes, homebrewPrefixes, chatrPrefix, chatrCellar)
-	}
-
-	binPath := filepath.Join(pkgPath, "bin")
-	l.walkAndReplace(binPath, placeholders, cellarPrefixes, homebrewPrefixes, chatrPrefix, chatrCellar)
-	l.patchBinaryStrings(pkgPath, cellarPrefixes, homebrewPrefixes, chatrPrefix)
+	modified := patchBinaryStrings(pkgPath, buildPrefix, chatrPrefix)
 	l.patchRpath(pkgPath)
+	if runtime.GOOS == "darwin" {
+		resign(modified)
+	}
 
 	return nil
 }
 
-func (l *Linker) patchBinaryStrings(pkgPath string, cellarPrefixes, homebrewPrefixes []string, chatrPrefix string) {
+func perlPath(prefix, name string, deps []string) string {
+	if name == "perl" || slices.Contains(deps, "perl") {
+		return filepath.Join(prefix, "opt", "perl", "bin", "perl")
+	}
+	return "/usr/bin/perl"
+}
+
+func javaHome(prefix string, deps []string, goos string) string {
+	jdk := "openjdk"
+	for _, d := range deps {
+		if d == "openjdk" || strings.HasPrefix(d, "openjdk@") {
+			jdk = d
+			break
+		}
+	}
+	home := filepath.Join(prefix, "opt", jdk, "libexec")
+	if goos == "darwin" {
+		home = filepath.Join(home, "openjdk.jdk", "Contents", "Home")
+	}
+	return home
+}
+
+func isBinary(content []byte) bool {
+	return bytes.IndexByte(content[:min(512, len(content))], 0) >= 0
+}
+
+func relocateTextFile(path string, replacer *strings.Replacer) {
+	content, err := os.ReadFile(path)
+	if err != nil || len(content) == 0 || isBinary(content) {
+		return
+	}
+	updated := replacer.Replace(string(content))
+	if updated == string(content) {
+		return
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	os.WriteFile(path, []byte(updated), info.Mode())
+}
+
+// patchBinaryStrings rewrites NUL-terminated strings that mention the build
+// prefix. Cellar paths become version-agnostic opt paths and the prefix
+// becomes chatr's. A string is only replaced when the result fits, padded
+// with NULs, in the original space. It returns the files it changed.
+func patchBinaryStrings(pkgPath, buildPrefix, chatrPrefix string) []string {
 	chatrOpt := filepath.Join(chatrPrefix, "opt")
+	needle := []byte(buildPrefix)
+	var modified []string
 
 	filepath.WalkDir(pkgPath, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if err != nil || !d.Type().IsRegular() {
 			return nil
 		}
-
 		content, err := os.ReadFile(path)
-		if err != nil || len(content) == 0 {
+		if err != nil || len(content) == 0 || !isBinary(content) {
 			return nil
 		}
 
-		if !bytes.Contains(content[:min(512, len(content))], []byte{0x00}) {
-			return nil
+		changed := false
+		for off := 0; ; {
+			i := bytes.Index(content[off:], needle)
+			if i < 0 {
+				break
+			}
+			start := off + i
+			end := len(content)
+			if n := bytes.IndexByte(content[start:], 0); n >= 0 {
+				end = start + n
+			}
+			old := string(content[start:end])
+			updated := rewritePath(old, buildPrefix, chatrPrefix, chatrOpt)
+			if updated != old && len(updated) <= len(old) {
+				copy(content[start:end], updated)
+				clear(content[start+len(updated) : end])
+				changed = true
+			}
+			off = end
 		}
 
-		modified := false
-
-		// Rewrite Cellar paths in binaries to use opt symlinks (version-agnostic).
-		// e.g. /opt/homebrew/Cellar/python@3.11/3.11.15_1/Frameworks/... → ~/.chatr/opt/python@3.11/Frameworks/...
-		// The opt symlink resolves the version, so it doesn't need to be in the path.
-		// New path is null-padded to preserve the original string length in the binary.
-		for _, cellarPrefix := range cellarPrefixes {
-			prefix := []byte(cellarPrefix + "/")
-			for {
-				idx := bytes.Index(content, prefix)
-				if idx < 0 {
-					break
-				}
-
-				end := idx
-				for end < len(content) && content[end] != 0x00 {
-					end++
-				}
-
-				oldPath := string(content[idx:end])
-				remainder := oldPath[len(cellarPrefix)+1:]
-				parts := strings.SplitN(remainder, "/", 2)
-				if len(parts) == 0 {
-					break
-				}
-
-				pkgName := parts[0]
-				var newPath string
-				if len(parts) > 1 {
-					versionAndRest := parts[1]
-					restParts := strings.SplitN(versionAndRest, "/", 2)
-					if len(restParts) > 1 {
-						newPath = chatrOpt + "/" + pkgName + "/" + restParts[1]
-					} else {
-						newPath = chatrOpt + "/" + pkgName
-					}
-				} else {
-					newPath = chatrOpt + "/" + pkgName
-				}
-
-				if len(newPath) > len(oldPath) {
-					break
-				}
-
-				replacement := make([]byte, end-idx)
-				copy(replacement, []byte(newPath))
-				copy(content[idx:end], replacement)
-				modified = true
-			}
-		}
-
-		// Rewrite Homebrew prefix paths to chatr prefix.
-		// e.g. /opt/homebrew/lib/libz.dylib → ~/.chatr/lib/libz.dylib
-		// Only possible when chatr prefix is shorter or equal length.
-		for _, homebrewPrefix := range homebrewPrefixes {
-			if len(chatrPrefix) > len(homebrewPrefix) {
-				continue
-			}
-			old := []byte(homebrewPrefix)
-			for {
-				idx := bytes.Index(content, old)
-				if idx < 0 {
-					break
-				}
-
-				end := idx
-				for end < len(content) && content[end] != 0x00 {
-					end++
-				}
-
-				oldStr := content[idx:end]
-				newPath := chatrPrefix + string(oldStr[len(homebrewPrefix):])
-				if len(newPath) > len(oldStr) {
-					break
-				}
-
-				replacement := make([]byte, len(oldStr))
-				copy(replacement, []byte(newPath))
-				copy(content[idx:end], replacement)
-				modified = true
-			}
-		}
-
-		if modified {
+		if changed {
 			info, err := os.Stat(path)
 			if err != nil {
 				return nil
 			}
-			os.WriteFile(path, content, info.Mode())
+			if os.WriteFile(path, content, info.Mode()) == nil {
+				modified = append(modified, path)
+			}
 		}
-
 		return nil
 	})
+
+	return modified
 }
 
-func (l *Linker) walkAndReplace(dirPath string, placeholders map[string]string, cellarPrefixes, homebrewPrefixes []string, chatrPrefix, chatrCellar string) error {
-	return filepath.WalkDir(dirPath, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
+// rewritePath maps every build-prefix path in s to chatr. Cellar paths
+// drop their version and go through opt, e.g.
+// /opt/homebrew/Cellar/python@3.13/3.13.1/Frameworks → <prefix>/opt/python@3.13/Frameworks.
+func rewritePath(s, buildPrefix, chatrPrefix, chatrOpt string) string {
+	cellar := buildPrefix + "/Cellar/"
+	var b strings.Builder
+	for {
+		i := strings.Index(s, cellar)
+		if i < 0 {
+			break
 		}
-		l.relocateFile(path, placeholders, cellarPrefixes, homebrewPrefixes, chatrPrefix, chatrCellar)
-		return nil
-	})
+		b.WriteString(s[:i])
+		rest := s[i+len(cellar):]
+		name, afterName, _ := strings.Cut(rest, "/")
+		b.WriteString(chatrOpt + "/" + name)
+		if _, afterVersion, ok := strings.Cut(afterName, "/"); ok {
+			s = "/" + afterVersion
+		} else {
+			s = ""
+		}
+	}
+	b.WriteString(s)
+	return strings.ReplaceAll(b.String(), buildPrefix, chatrPrefix)
 }
 
-func (l *Linker) relocateFile(path string, placeholders map[string]string, cellarPrefixes, homebrewPrefixes []string, chatrPrefix, chatrCellar string) {
+func isMachO(path string) bool {
 	f, err := os.Open(path)
 	if err != nil {
-		return
+		return false
 	}
 	defer f.Close()
-
-	info, err := f.Stat()
-	if err != nil {
-		return
+	magic := make([]byte, 4)
+	if _, err := io.ReadFull(f, magic); err != nil {
+		return false
 	}
-
-	header := make([]byte, 512)
-	n, _ := f.Read(header)
-	if n == 0 || bytes.Contains(header[:n], []byte{0x00}) {
-		return
+	switch string(magic) {
+	case "\xfe\xed\xfa\xce", "\xce\xfa\xed\xfe",
+		"\xfe\xed\xfa\xcf", "\xcf\xfa\xed\xfe",
+		"\xca\xfe\xba\xbe", "\xbe\xba\xfe\xca":
+		return true
 	}
+	return false
+}
 
-	f.Seek(0, io.SeekStart)
-	content, err := io.ReadAll(f)
-	if err != nil || len(content) == 0 {
-		return
-	}
-
-	modified := false
-	str := string(content)
-
-	for placeholder, replacement := range placeholders {
-		if strings.Contains(str, placeholder) {
-			str = strings.ReplaceAll(str, placeholder, replacement)
-			modified = true
+// resign restores ad-hoc signatures that string patching invalidated.
+// Apple Silicon refuses to load a Mach-O whose signature does not match.
+func resign(paths []string) {
+	sem := make(chan struct{}, runtime.NumCPU())
+	var wg sync.WaitGroup
+	for _, path := range paths {
+		if !isMachO(path) {
+			continue
 		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			exec.Command("codesign", "--force", "--sign", "-", path).Run()
+		}()
 	}
-
-	for _, cellarPrefix := range cellarPrefixes {
-		if strings.Contains(str, cellarPrefix) {
-			str = strings.ReplaceAll(str, cellarPrefix, chatrCellar)
-			modified = true
-		}
-	}
-
-	for _, homebrewPrefix := range homebrewPrefixes {
-		if strings.Contains(str, homebrewPrefix) {
-			str = strings.ReplaceAll(str, homebrewPrefix, chatrPrefix)
-			modified = true
-		}
-	}
-
-	if modified {
-		os.WriteFile(path, []byte(str), info.Mode())
-	}
+	wg.Wait()
 }
 
 func (l *Linker) patchRpath(pkgPath string) error {

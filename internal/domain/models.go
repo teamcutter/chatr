@@ -13,6 +13,9 @@ type Package struct {
 	IsCask      bool
 	KegOnly     bool
 	Cellar      string
+	// Dependencies are the formula's runtime dependencies, used to fill
+	// relocation placeholders such as the Perl and Java paths.
+	Dependencies []string
 	// Apps lists the .app bundle names a cask is expected to install.
 	Apps []string
 	// Force allows a cask install to replace an existing app bundle in the

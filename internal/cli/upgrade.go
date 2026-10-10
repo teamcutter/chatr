@@ -98,15 +98,16 @@ func newUpgradeCmd() *cobra.Command {
 							continue
 						}
 						pkg, err := mgr.Install(ctx, domain.Package{
-							Name:        rp.Formula.Name,
-							Version:     rp.Formula.Version,
-							Revision:    rp.Formula.Revision,
-							FullVersion: rp.Formula.FullVersion(),
-							DownloadURL: rp.Formula.URL,
-							SHA256:      rp.Formula.SHA256,
-							IsDep:       true,
-							KegOnly:     rp.Formula.KegOnly,
-							Cellar:      rp.Formula.Cellar,
+							Name:         rp.Formula.Name,
+							Version:      rp.Formula.Version,
+							Revision:     rp.Formula.Revision,
+							FullVersion:  rp.Formula.FullVersion(),
+							DownloadURL:  rp.Formula.URL,
+							SHA256:       rp.Formula.SHA256,
+							IsDep:        true,
+							KegOnly:      rp.Formula.KegOnly,
+							Cellar:       rp.Formula.Cellar,
+							Dependencies: rp.Formula.Dependencies,
 						})
 						if err != nil {
 							mu.Lock()
@@ -139,15 +140,16 @@ func newUpgradeCmd() *cobra.Command {
 						FullVersion: installedPkg.FullVersion(),
 						IsCask:      installedPkg.IsCask,
 					}, domain.Package{
-						Name:        rootFormula.Name,
-						Version:     rootFormula.Version,
-						Revision:    rootFormula.Revision,
-						FullVersion: rootFormula.FullVersion(),
-						DownloadURL: rootFormula.URL,
-						SHA256:      rootFormula.SHA256,
-						IsCask:      rootFormula.IsCask,
-						KegOnly:     rootFormula.KegOnly,
-						Cellar:      rootFormula.Cellar,
+						Name:         rootFormula.Name,
+						Version:      rootFormula.Version,
+						Revision:     rootFormula.Revision,
+						FullVersion:  rootFormula.FullVersion(),
+						DownloadURL:  rootFormula.URL,
+						SHA256:       rootFormula.SHA256,
+						IsCask:       rootFormula.IsCask,
+						KegOnly:      rootFormula.KegOnly,
+						Cellar:       rootFormula.Cellar,
+						Dependencies: rootFormula.Dependencies,
 					})
 					if err != nil {
 						mu.Lock()
