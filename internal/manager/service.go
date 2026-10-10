@@ -20,6 +20,7 @@ type Manager struct {
 	state     domain.State
 	linker    *linker.Linker
 	appsDir   string
+	progress  domain.Progress
 }
 
 func New(
@@ -38,6 +39,15 @@ func New(
 		linker:    lnkr,
 		appsDir:   appsDir,
 	}
+}
+
+func (m *Manager) SetProgress(p domain.Progress) { m.progress = p }
+
+func (m *Manager) status(desc string) func() {
+	if m.progress == nil {
+		return func() {}
+	}
+	return m.progress.Status(desc)
 }
 
 // checkAppsAbsent refuses to proceed when any of the given .app bundles is
@@ -102,6 +112,8 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 	if err := m.state.BeginInstall(pendingPkg); err != nil {
 		return nil, fmt.Errorf("failed to begin install: %w", err)
 	}
+
+	defer m.status("Installing " + pkg.Name)()
 
 	var appNames []string
 
@@ -282,6 +294,8 @@ func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPac
 	if err := m.state.BeginInstall(pendingPkg); err != nil {
 		return nil, fmt.Errorf("failed to begin upgrade: %w", err)
 	}
+
+	defer m.status("Upgrading " + newPackage.Name)()
 
 	if oldInstalled != nil {
 		if oldInstalled.IsCask {

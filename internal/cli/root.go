@@ -79,13 +79,18 @@ func newManagerWithOptions(cask bool) (*manager.Manager, *config.Config, domain.
 		}
 	}
 
+	f := fetcher.New(cfg.CacheDir, 1*time.Hour)
+	f.SetProgress(progress)
+	f.SetWarnWriter(progress)
+
 	mgr := manager.New(
-		fetcher.New(cfg.CacheDir, 1*time.Hour),
+		f,
 		c,
 		extractor.New(),
 		st,
 		lnkr,
 		cfg.AppsDir)
+	mgr.SetProgress(progress)
 
 	return mgr, cfg, reg, resolver.New(reg, st), nil
 }

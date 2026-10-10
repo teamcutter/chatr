@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/schollz/progressbar/v3"
 	"github.com/teamcutter/chatr/internal/domain"
 )
 
@@ -29,6 +28,15 @@ type HTTPFetcher struct {
 	retries int
 	// backoff is the base delay between attempts; it grows linearly.
 	backoff time.Duration
+	// progress, when set, receives one tracker per download.
+	progress domain.Progress
+}
+
+type trackerWriter struct{ t domain.Tracker }
+
+func (w trackerWriter) Write(p []byte) (int, error) {
+	w.t.Add(int64(len(p)))
+	return len(p), nil
 }
 
 func New(outputDir string, timeout time.Duration) *HTTPFetcher {
@@ -49,6 +57,10 @@ func New(outputDir string, timeout time.Duration) *HTTPFetcher {
 		backoff:   500 * time.Millisecond,
 	}
 }
+
+func (f *HTTPFetcher) SetProgress(p domain.Progress) { f.progress = p }
+
+func (f *HTTPFetcher) SetWarnWriter(w io.Writer) { f.warn = w }
 
 // isTransient reports whether a request should be retried.
 func isTransient(resp *http.Response, err error) bool {
@@ -148,12 +160,12 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, pkg domain.Package) domain.Fetc
 		return domain.FetchResult{Package: pkg.Name, Version: pkg.Version, Error: err}
 	}
 
-	bar := progressbar.DefaultBytes(
-		resp.ContentLength,
-		fmt.Sprintf("Downloading %s", pkg.Name),
-	)
-
-	writers := []io.Writer{file, bar}
+	writers := []io.Writer{file}
+	if f.progress != nil {
+		t := f.progress.Start(pkg.Name, resp.ContentLength)
+		defer t.Done()
+		writers = append(writers, trackerWriter{t})
+	}
 
 	h := sha256.New()
 	if pkg.SHA256 != "" {

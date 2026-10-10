@@ -4,7 +4,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/teamcutter/chatr/internal/domain"
@@ -137,5 +139,38 @@ func TestInstallCaskWhenAppAbsent(t *testing.T) {
 	}
 	if installed, _, _ := m.IsInstalled("foo"); !installed {
 		t.Error("package should be recorded as installed")
+	}
+}
+
+type fakeProgress struct {
+	mu      sync.Mutex
+	started []string
+	stopped []string
+}
+
+func (p *fakeProgress) Start(name string, total int64) domain.Tracker { return nil }
+func (p *fakeProgress) Status(desc string) func() {
+	p.mu.Lock()
+	p.started = append(p.started, desc)
+	p.mu.Unlock()
+	return func() {
+		p.mu.Lock()
+		p.stopped = append(p.stopped, desc)
+		p.mu.Unlock()
+	}
+}
+
+func TestInstallReportsInstallingStatus(t *testing.T) {
+	m, _, _, _ := newTestManager(t, nil)
+	p := &fakeProgress{}
+	m.SetProgress(p)
+
+	if _, err := m.Install(context.Background(), caskPkg(false)); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	want := []string{"Installing " + caskPkg(false).Name}
+	if !slices.Equal(p.started, want) || !slices.Equal(p.stopped, want) {
+		t.Errorf("status lifecycle: started=%v stopped=%v, want %v", p.started, p.stopped, want)
 	}
 }
