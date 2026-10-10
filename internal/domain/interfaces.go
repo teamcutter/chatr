@@ -39,6 +39,7 @@ type Registry interface {
 
 type Progress interface {
 	Start(name string, total int64) Tracker
+	Status(desc string) func()
 }
 
 type Tracker interface {

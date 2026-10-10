@@ -20,5 +20,5 @@ var (
 var progress = ui.New(os.Stderr)
 
 func withSpinner(_ context.Context, desc string) (stop func()) {
-	return progress.Spin(desc)
+	return progress.Status(desc)
 }

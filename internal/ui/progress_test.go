@@ -22,7 +22,7 @@ func TestNonTTYPrintsOneLinePerDownload(t *testing.T) {
 	tr.Add(1500)
 	tr.Done()
 
-	stop := r.Spin("Resolving jq...")
+	stop := r.Status("Resolving jq...")
 	stop()
 
 	got := buf.String()
@@ -38,6 +38,7 @@ func TestTTYFrameListsEveryActiveDownload(t *testing.T) {
 	b := r.Start("oniguruma", 4000)
 	a.Add(500)
 	b.Add(1000)
+	stopStatus := r.Status("Installing pcre2")
 
 	buf.Reset()
 	r.mu.Lock()
@@ -50,12 +51,16 @@ func TestTTYFrameListsEveryActiveDownload(t *testing.T) {
 			t.Errorf("frame missing %q:\n%s", want, frame)
 		}
 	}
-	if r.rendered != 3 {
-		t.Errorf("rendered = %d, want 3", r.rendered)
+	if r.rendered != 4 {
+		t.Errorf("rendered = %d, want 4", r.rendered)
+	}
+	if strings.Index(frame, "Installing pcre2") < strings.Index(frame, "oniguruma") {
+		t.Errorf("status line should render below downloads:\n%s", frame)
 	}
 
 	a.Done()
 	b.Done()
+	stopStatus()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()

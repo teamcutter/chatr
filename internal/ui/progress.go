@@ -86,7 +86,7 @@ func (r *Renderer) Start(name string, total int64) domain.Tracker {
 	return &tracker{r: r, e: e}
 }
 
-func (r *Renderer) Spin(desc string) func() {
+func (r *Renderer) Status(desc string) func() {
 	e := r.add(desc, -1, true)
 	var once sync.Once
 	return func() { once.Do(func() { r.remove(e) }) }
@@ -178,11 +178,11 @@ func (r *Renderer) lines(now time.Time) []string {
 	glyph := spinnerFrames[r.frame%len(spinnerFrames)]
 	width := r.width()
 
-	var downloads, spinners []*entry
+	var downloads, statuses []*entry
 	nameW := 0
 	for _, e := range r.entries {
 		if e.spinner {
-			spinners = append(spinners, e)
+			statuses = append(statuses, e)
 			continue
 		}
 		downloads = append(downloads, e)
@@ -191,18 +191,13 @@ func (r *Renderer) lines(now time.Time) []string {
 	nameW = min(nameW, maxNameWidth)
 
 	var out []string
-	for _, e := range spinners {
-		out = append(out, fmt.Sprintf("%s %s", cyan(glyph), e.name))
+	if len(downloads) > 0 {
+		noun := "packages"
+		if len(downloads) == 1 {
+			noun = "package"
+		}
+		out = append(out, fmt.Sprintf("%s %s %s", cyan(glyph), bold("Downloading"), dim(fmt.Sprintf("%d %s", len(downloads), noun))))
 	}
-	if len(downloads) == 0 {
-		return out
-	}
-
-	noun := "packages"
-	if len(downloads) == 1 {
-		noun = "package"
-	}
-	out = append(out, fmt.Sprintf("%s %s %s", cyan(glyph), bold("Downloading"), dim(fmt.Sprintf("%d %s", len(downloads), noun))))
 
 	for _, e := range downloads {
 		e.sample(now)
@@ -233,6 +228,10 @@ func (r *Renderer) lines(now time.Time) []string {
 		}
 
 		out = append(out, fmt.Sprintf("  %-*s  %s  %s", nameW, name, bar, dim(stats)))
+	}
+
+	for _, e := range statuses {
+		out = append(out, fmt.Sprintf("%s %s", cyan(glyph), e.name))
 	}
 	return out
 }

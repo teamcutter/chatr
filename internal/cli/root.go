@@ -90,6 +90,7 @@ func newManagerWithOptions(cask bool) (*manager.Manager, *config.Config, domain.
 		st,
 		lnkr,
 		cfg.AppsDir)
+	mgr.SetProgress(progress)
 
 	return mgr, cfg, reg, resolver.New(reg, st), nil
 }
