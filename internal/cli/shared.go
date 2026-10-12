@@ -32,6 +32,6 @@ func warnLongPrefix(cfg *config.Config) {
 	if linker.CanRelocateBinaries(cfg.Prefix) {
 		return
 	}
-	fmt.Fprintf(progress, "%s prefix %s is longer than %s, so some bottles will not relocate correctly.\n  Move to %s: see \"Moving to /opt/chatr\" in the README.\n",
+	fmt.Fprintf(progress, "%s prefix %s is longer than %s, so some bottles will not relocate correctly.\n  To move to %s: chatr remove --all, delete cellar_dir from ~/.chatr/config.toml, run chatr new, then reinstall.\n",
 		yellow("warning:"), cfg.Prefix, linker.BuildPrefix(), config.DefaultPrefix)
 }

@@ -18,22 +18,6 @@ eval "$(/opt/chatr/bin/chatr shellenv)"
 
 For bash use `~/.bash_profile` on macOS or `~/.bashrc` on Linux. For fish, add `/opt/chatr/bin/chatr shellenv fish | source` to `~/.config/fish/config.fish`. The script prints the right line for your shell.
 
-### Why /opt/chatr
-
-Homebrew bottles are compiled for `/opt/homebrew` on Apple Silicon, `/usr/local` on Intel and `/home/linuxbrew/.linuxbrew` on Linux, and those paths are baked into the binaries. chatr rewrites them in place, which only works when the new prefix is no longer than the original. `/opt/chatr` fits on every platform, so the prefix is fixed and not a setting.
-
-### Moving to /opt/chatr
-
-Installs made before `/opt/chatr` keep using `~/.chatr`, because their packages were relocated for that path. On macOS, tools that locate their own files at runtime, such as Python, git or OpenSSL, can break there, and chatr prints a warning on install and upgrade. To move:
-
-```bash
-chatr list                       # note what you have installed
-chatr remove --all
-sudo mkdir -p /opt/chatr && sudo chown $(whoami) /opt/chatr
-```
-
-Then delete the `bin_dir`, `lib_dir`, `cellar_dir`, `opt_dir`, `include_dir`, `share_dir`, `etc_dir`, `var_dir` and `frameworks_dir` lines from `~/.chatr/config.toml`. They are no longer settings, and chatr only reads `cellar_dir` to recognize the old layout. Replace the PATH line in your shell config with the `eval "$(chatr shellenv)"` line above, open a new terminal and reinstall your packages.
-
 ## Usage
 
 ### Install a package

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 
 	"github.com/spf13/cobra"
@@ -12,12 +13,10 @@ func newNewCommand() *cobra.Command {
 		Use:   "new",
 		Short: "Update chatr to the newest version",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			stop := withSpinner(cmd.Context(), "Updating chatr...")
-			c := exec.Command("sh", "-c", "curl -sL https://raw.githubusercontent.com/teamcutter/chatr/main/install.sh | sh")
-			err := c.Run()
-			stop()
+			c := exec.Command("bash", "-c", "curl -sL https://raw.githubusercontent.com/teamcutter/chatr/main/install.sh | bash")
+			c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
 
-			if err != nil {
+			if err := c.Run(); err != nil {
 				fmt.Printf("%s Failed to update chatr: %v\n", red("✗"), err)
 				return fmt.Errorf("failed to update chatr")
 			}

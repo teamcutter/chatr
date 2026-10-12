@@ -25,37 +25,31 @@ if [[ -z "$VERSION" ]]; then
     exit 1
 fi
 
-if command -v chatr &>/dev/null; then
-    CURRENT=$(chatr version 2>/dev/null | sed -E 's/chatr-v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
-    LATEST="${VERSION#v}"
-    if [[ "$CURRENT" == "$LATEST" ]]; then
-        echo "chatr $VERSION is already installed"
-        exit 0
-    fi
-fi
-
 ensure_prefix() {
     [[ -d "$PREFIX" && -w "$PREFIX" ]] && return 0
-    echo "chatr installs packages under $PREFIX. Creating it, sudo may ask for your password."
+    echo "chatr lives under $PREFIX. Creating it, sudo may ask for your password."
     mkdir -p "$PREFIX" 2>/dev/null && [[ -w "$PREFIX" ]] && return 0
     sudo mkdir -p "$PREFIX" < /dev/tty && sudo chown "$(id -un)" "$PREFIX" < /dev/tty
 }
 
-# Updates replace the binary where it already is. New installs put it in the
-# package prefix so a single PATH entry covers chatr and its packages.
-EXISTING=$(command -v chatr 2>/dev/null || true)
-if [[ -n "$EXISTING" && -w "$(dirname "$EXISTING")" ]]; then
-    INSTALL_DIR=$(dirname "$EXISTING")
-elif [[ -f "$HOME/.chatr/config.toml" || "$OS" == "windows" ]]; then
-    INSTALL_DIR="$HOME/.chatr/bin"
+LEGACY_DIR="$HOME/.chatr/bin"
+if [[ "$OS" == "windows" ]]; then
+    INSTALL_DIR="$LEGACY_DIR"
 elif ensure_prefix; then
     INSTALL_DIR="$PREFIX/bin"
 else
-    INSTALL_DIR="$HOME/.chatr/bin"
-    echo "Could not create $PREFIX. Create it before installing packages:"
+    echo "Could not create $PREFIX. Create it, then run this script again:"
     echo ""
     echo "  sudo mkdir -p $PREFIX && sudo chown \$(whoami) $PREFIX"
-    echo ""
+    exit 1
+fi
+
+if [[ -x "$INSTALL_DIR/chatr" ]]; then
+    CURRENT=$("$INSTALL_DIR/chatr" version 2>/dev/null | sed -E 's/chatr-v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+    if [[ "$CURRENT" == "${VERSION#v}" ]]; then
+        echo "chatr $VERSION is already installed"
+        exit 0
+    fi
 fi
 
 EXT="tar.gz"
@@ -91,6 +85,11 @@ if [[ "$OS" == "darwin" ]]; then
 fi
 
 echo "Installed chatr to $INSTALL_DIR/chatr"
+
+if [[ "$INSTALL_DIR" != "$LEGACY_DIR" && -f "$LEGACY_DIR/chatr" && ! -L "$LEGACY_DIR/chatr" ]]; then
+    rm -f "$LEGACY_DIR/chatr"
+    echo "Removed the old copy at $LEGACY_DIR/chatr"
+fi
 
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     case "${SHELL##*/}" in
