@@ -29,10 +29,12 @@ Installs made before `/opt/chatr` keep using `~/.chatr`, because their packages 
 ```bash
 chatr list                       # note what you have installed
 chatr remove --all
-sudo mkdir -p /opt/chatr && sudo chown $(whoami) /opt/chatr
+chatr new                        # moves chatr itself to /opt/chatr/bin
 ```
 
-Then delete the `bin_dir`, `lib_dir`, `cellar_dir`, `opt_dir`, `include_dir`, `share_dir`, `etc_dir`, `var_dir` and `frameworks_dir` lines from `~/.chatr/config.toml`. They are no longer settings, and chatr only reads `cellar_dir` to recognize the old layout. Replace the PATH line in your shell config with the `eval "$(chatr shellenv)"` line above, open a new terminal and reinstall your packages.
+`chatr new` runs the install script, which creates `/opt/chatr` with `sudo` if it does not exist yet, installs chatr into `/opt/chatr/bin` and removes the old copy from `~/.chatr/bin`.
+
+Then delete the `bin_dir`, `lib_dir`, `cellar_dir`, `opt_dir`, `include_dir`, `share_dir`, `etc_dir`, `var_dir` and `frameworks_dir` lines from `~/.chatr/config.toml`. They are no longer settings, and chatr only reads `cellar_dir` to recognize the old layout. Replace the PATH line in your shell config with the `eval "$(/opt/chatr/bin/chatr shellenv)"` line above, open a new terminal and reinstall your packages.
 
 ## Usage
 
