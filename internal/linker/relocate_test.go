@@ -110,7 +110,7 @@ func TestCanRelocateBinaries(t *testing.T) {
 	if !CanRelocateBinaries("/opt/chatr") {
 		t.Error("/opt/chatr must fit every Homebrew build prefix")
 	}
-	if CanRelocateBinaries("/Users/someone/.chatr") {
-		t.Error("a home-directory prefix is longer than the build prefix")
+	if CanRelocateBinaries(BuildPrefix() + "/x") {
+		t.Error("a prefix longer than the build prefix cannot fit")
 	}
 }
