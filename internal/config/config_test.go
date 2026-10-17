@@ -83,9 +83,24 @@ func TestSaveWritesNoPrefixSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{"prefix", "cellar_dir", "bin_dir", "opt_dir"} {
+	for _, key := range []string{"prefix", "cellar_dir", "bin_dir", "opt_dir", "chatr_dir", "packages_dir"} {
 		if strings.Contains(string(data), key) {
 			t.Errorf("saved config contains %s:\n%s", key, data)
 		}
+	}
+}
+
+func TestOldConfigWithRemovedKeysStillLoads(t *testing.T) {
+	p := writeConfig(t, `
+chatr_dir = "/home/u/.chatr"
+packages_dir = "/home/u/.chatr/packages"
+max_parallel = 3
+`)
+	cfg, err := decode(p, "/home/u", DefaultConfig())
+	if err != nil {
+		t.Fatalf("config with removed keys failed to load: %v", err)
+	}
+	if cfg.MaxParallel != 3 {
+		t.Errorf("max_parallel = %d, want 3", cfg.MaxParallel)
 	}
 }

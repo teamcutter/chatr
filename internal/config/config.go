@@ -18,8 +18,6 @@ const DefaultPrefix = "/opt/chatr"
 type Config struct {
 	Prefix        string `toml:"-"`
 	CacheDir      string `toml:"cache_dir"`
-	ChatrDir      string `toml:"chatr_dir"`
-	PackagesDir   string `toml:"packages_dir"`
 	BinDir        string `toml:"-"`
 	LibDir        string `toml:"-"`
 	AppsDir       string `toml:"apps_dir"`
@@ -55,8 +53,6 @@ func DefaultConfig() *Config {
 
 	cfg := &Config{
 		CacheDir:     filepath.Join(base, "cache"),
-		ChatrDir:     base,
-		PackagesDir:  filepath.Join(base, "packages"),
 		AppsDir:      "/Applications",
 		FormulaeDir:  filepath.Join(base, "formulae"),
 		ManifestFile: filepath.Join(base, "installed.json"),
