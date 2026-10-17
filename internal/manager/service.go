@@ -2,11 +2,15 @@ package manager
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/teamcutter/chatr/internal/domain"
@@ -50,6 +54,42 @@ func (m *Manager) status(desc string) func() {
 	return m.progress.Status(desc)
 }
 
+// archive returns a verified archive for pkg. A cached copy whose checksum
+// no longer matches is discarded and downloaded again.
+func (m *Manager) archive(ctx context.Context, pkg domain.Package) (string, error) {
+	if m.cache.Has(pkg.Name, pkg.FullVersion) {
+		path := m.cache.GetPath(pkg.Name, pkg.FullVersion)
+		if pkg.SHA256 == "" || checksumMatches(path, pkg.SHA256) {
+			return path, nil
+		}
+		os.Remove(path)
+	}
+
+	result := m.fetcher.Fetch(ctx, pkg)
+	if result.Error != nil {
+		return "", result.Error
+	}
+
+	path, err := m.cache.Store(pkg.Name, pkg.FullVersion, result.Path)
+	if err != nil {
+		return "", fmt.Errorf("failed to cache %s: %w", pkg.Name, err)
+	}
+	return path, nil
+}
+
+func checksumMatches(path, want string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return false
+	}
+	return strings.EqualFold(hex.EncodeToString(h.Sum(nil)), want)
+}
+
 // checkAppsAbsent refuses to proceed when any of the given .app bundles is
 // already present in the apps directory. Casks are extracted straight into
 // that directory and would silently replace whatever is there, including
@@ -78,20 +118,9 @@ func (m *Manager) Install(ctx context.Context, pkg domain.Package) (*domain.Inst
 		}
 	}
 
-	var archivePath string
-	if m.cache.Has(pkg.Name, pkg.FullVersion) {
-		archivePath = m.cache.GetPath(pkg.Name, pkg.FullVersion)
-	} else {
-		result := m.fetcher.Fetch(ctx, pkg)
-		if result.Error != nil {
-			return nil, result.Error
-		}
-
-		var err error
-		archivePath, err = m.cache.Store(pkg.Name, pkg.FullVersion, result.Path)
-		if err != nil {
-			return nil, fmt.Errorf("failed to cache %s: %w", pkg.Name, err)
-		}
+	archivePath, err := m.archive(ctx, pkg)
+	if err != nil {
+		return nil, err
 	}
 
 	pkgPath := m.linker.CellarPath(pkg.Name, pkg.FullVersion)
@@ -264,19 +293,9 @@ func (m *Manager) Upgrade(ctx context.Context, oldPackage domain.Package, newPac
 		oldDeps = oldInstalled.Dependencies
 	}
 
-	var archivePath string
-	if m.cache.Has(newPackage.Name, newPackage.FullVersion) {
-		archivePath = m.cache.GetPath(newPackage.Name, newPackage.FullVersion)
-	} else {
-		result := m.fetcher.Fetch(ctx, newPackage)
-		if result.Error != nil {
-			return nil, result.Error
-		}
-		var err error
-		archivePath, err = m.cache.Store(newPackage.Name, newPackage.FullVersion, result.Path)
-		if err != nil {
-			return nil, fmt.Errorf("failed to cache %s: %w", newPackage.Name, err)
-		}
+	archivePath, err := m.archive(ctx, newPackage)
+	if err != nil {
+		return nil, err
 	}
 
 	pkgPath := m.linker.CellarPath(newPackage.Name, newPackage.FullVersion)
