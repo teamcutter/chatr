@@ -14,6 +14,7 @@ import (
 )
 
 type Linker struct {
+	mu         sync.Mutex
 	cellarDir  string
 	optDir     string
 	prefixDirs map[string]string
@@ -57,94 +58,6 @@ func (l *Linker) RemoveOptLink(name string) error {
 	if _, err := os.Lstat(optLink); err == nil {
 		return os.Remove(optLink)
 	}
-	return nil
-}
-
-func (l *Linker) LinkToPrefix(name, version string) ([]string, error) {
-	cellarPath := filepath.Join(l.cellarDir, name, version)
-	seenDirs := make(map[string]bool)
-	var linked []string
-
-	for dirName, prefixDir := range l.prefixDirs {
-		cellarSubdir := filepath.Join(cellarPath, dirName)
-		if _, err := os.Stat(cellarSubdir); os.IsNotExist(err) {
-			continue
-		}
-
-		if err := os.MkdirAll(prefixDir, 0755); err != nil {
-			return nil, err
-		}
-
-		entries, err := os.ReadDir(cellarSubdir)
-		if err != nil {
-			continue
-		}
-
-		for _, entry := range entries {
-			entryName := entry.Name()
-			src := filepath.Join(cellarSubdir, entryName)
-			linkPath := filepath.Join(prefixDir, entryName)
-
-			if _, err := os.Lstat(linkPath); err == nil {
-				os.Remove(linkPath)
-			}
-
-			if err := os.Symlink(src, linkPath); err != nil {
-				continue
-			}
-
-			if !seenDirs[dirName] {
-				seenDirs[dirName] = true
-				linked = append(linked, dirName)
-			}
-		}
-	}
-
-	return linked, nil
-}
-
-func (l *Linker) UnlinkFromPrefix(name string, linkedDirs []string) error {
-	cellarPath := filepath.Join(l.cellarDir, name)
-	absCellar, err := filepath.Abs(cellarPath)
-	if err != nil {
-		return err
-	}
-
-	dirs := l.prefixDirs
-	if len(linkedDirs) > 0 {
-		dirs = make(map[string]string)
-		for _, d := range linkedDirs {
-			if prefixDir, ok := l.prefixDirs[d]; ok {
-				dirs[d] = prefixDir
-			}
-		}
-	}
-
-	for _, prefixDir := range dirs {
-		entries, err := os.ReadDir(prefixDir)
-		if err != nil {
-			continue
-		}
-
-		for _, entry := range entries {
-			linkPath := filepath.Join(prefixDir, entry.Name())
-
-			linkTarget, err := os.Readlink(linkPath)
-			if err != nil {
-				continue
-			}
-
-			absTarget, err := filepath.Abs(linkTarget)
-			if err != nil {
-				continue
-			}
-
-			if strings.HasPrefix(absTarget, absCellar+string(os.PathSeparator)) {
-				os.Remove(linkPath)
-			}
-		}
-	}
-
 	return nil
 }
 
